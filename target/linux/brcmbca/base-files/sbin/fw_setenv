@@ -1,0 +1,36 @@
+#! /bin/sh
+
+usage()
+{
+    echo "Usage: fw_setenv [OPTIONS]... [VARIABLE]..."
+    echo "Modify variables in U-Boot environment"
+    echo ""
+    echo " -h, --help           print this help."
+    echo ""
+}
+
+while getopts "h" opt; do
+    case $opt in
+	h)
+	    usage
+	    exit 0
+	    ;;
+    esac
+done
+shift $((OPTIND -1))
+
+# sanity check we need a variable 
+if [ "$#" -eq 0 ]
+then
+    echo "## Error: variable name missing"
+    exit 1
+fi
+
+# extract var and value from arguments
+var=$1
+shift 1
+value=$@
+
+# write variable
+printf "${var}=${value}" >  /proc/nvram/set
+

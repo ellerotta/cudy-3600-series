@@ -1,0 +1,19 @@
+diff -urN orig_ndisc6/src/ndisc.c ndisc6/src/ndisc.c
+--- orig_ndisc6/src/ndisc.c	2023-03-24 00:37:17.000000000 +0800
++++ ndisc6/src/ndisc.c	2023-03-27 14:20:26.618008542 +0800
+@@ -150,13 +150,13 @@
+ {
+ 	while (len > 1)
+ 	{
+-		printf ("%02X:", *ptr);
++		printf ("%02x:", *ptr);
+ 		ptr++;
+ 		len--;
+ 	}
+ 
+ 	if (len == 1)
+-		printf ("%02X\n", *ptr);
++		printf ("%02x\n", *ptr);
+ }
+ 
+ 

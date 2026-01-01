@@ -1,0 +1,300 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>MQTT Client Configuration</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'mqttclntcfg.cgi?';
+        var num = 0;
+        var version = document.getElementById('protocolVersion').value;
+        var clientID = document.getElementById('clientID').value;
+
+        // validate client ID
+        if ((version == '3.1' || version == '3.1.1') &&
+            clientID == '') {
+          alert('Client ID cannot be empty when protocol version is ' + version + '.');
+          return;
+        }
+        // validate broker address
+        num = document.getElementById('brokerAddress').value.length;
+        if (num > 255) {
+          alert('Broker address is too long. Max length is 255.');
+          return;
+        }
+        // validate broker port
+        if (isNaN(document.getElementById('brokerPort').value)) {
+          alert('Broker port is not a number.');
+          return;
+        }
+        num = parseInt(document.getElementById('brokerPort').value);
+        if (num < 1 || num > 65535)
+        {
+          alert('Broker port ' + num + ' is out of range [1-65535].');
+          return;
+        }
+        // validate keepAliveTime
+        if (isNaN(document.getElementById('keepAliveTime').value)) {
+          alert('Keep a live is not a number.');
+          return;
+        }
+        num = parseInt(document.getElementById('keepAliveTime').value);
+        if (num < 1 || num > 65535)
+        {
+          alert('Kep a live ' + num + ' is out of range [1-65535].');
+          return;
+        }
+
+        // Alias
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            val += info[0] + '|';
+          } else
+            val += '|';
+        } else
+          val += '|';
+        // Name
+        val += document.getElementById('name').value + '|';
+        // Client ID
+        val += document.getElementById('clientID').value + '|';
+        // Enable Connection
+        if (document.getElementById('enableConn-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        // Enable Encryption
+        if (document.getElementById('enableEncrypt-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        // Clean Session
+        if (document.getElementById('cleanSession-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        // Clean Start
+        if (document.getElementById('cleanStart-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        // Request Response Information
+        if (document.getElementById('response-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        // Request Problem Information
+        if (document.getElementById('problem-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        // Protocol Version
+        val += document.getElementById('protocolVersion').value + '|';
+        // Transport Protocol
+        val += document.getElementById('transportProtocol').value + '|';
+        // Broker address
+        val += document.getElementById('brokerAddress').value + '|';
+        // Broker port
+        val += document.getElementById('brokerPort').value + '|';
+        // Username
+        val += document.getElementById('username').value + '|';
+        // Password
+        val += document.getElementById('password').value + '|';
+        // Keep A Live
+        val += document.getElementById('keepAliveTime').value;
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function bodyLoad() {
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            // Name
+            document.getElementById('name').value = info[1];
+            // Client ID
+            document.getElementById('clientID').value = info[2];
+            // Enable Connection
+            if (info[3] == 'Yes')
+              document.getElementById('enableConn-1').checked = true;
+            else
+              document.getElementById('enableConn-0').checked = true;
+            // Enable Encryption
+            if (info[4] == 'Yes')
+              document.getElementById('enableEncrypt-1').checked = true;
+            else
+              document.getElementById('enableEncrypt-0').checked = true;
+            // Clean Session
+            if (info[5] == 'Yes')
+              document.getElementById('cleanSession-1').checked = true;
+            else
+              document.getElementById('cleanSession-0').checked = true;
+            // Clean Start
+            if (info[6] == 'Yes')
+              document.getElementById('cleanStart-1').checked = true;
+            else
+              document.getElementById('cleanStart-0').checked = true;
+            // Request Response Information
+            if (info[7] == 'Yes')
+              document.getElementById('response-1').checked = true;
+            else
+              document.getElementById('response-0').checked = true;
+            // Request Problem Information
+            if (info[8] == 'Yes')
+              document.getElementById('problem-1').checked = true;
+            else
+              document.getElementById('problem-0').checked = true;
+            // Protocol Version
+            document.getElementById('protocolVersion').value = info[9];
+            // Transport Protocol
+            document.getElementById('transportProtocol').value = info[10];
+            // Broker Address
+            document.getElementById('brokerAddress').value = info[11];
+            // Broker Port
+            document.getElementById('brokerPort').value = info[12];
+            // Username
+            document.getElementById('username').value = info[13];
+            // Password
+            document.getElementById('password').value = info[14];
+            // Keep A Live
+            document.getElementById('keepAliveTime').value = info[15];
+          }
+
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          // Enable Connection
+          document.getElementById('enableConn-0').checked = true;
+          // Enable Encryption
+          document.getElementById('enableEncrypt-1').checked = true;
+          // Clean Session
+          document.getElementById('cleanSession-1').checked = true;
+          // Clean Start
+          document.getElementById('cleanStart-1').checked = true;
+          // Request Response Information
+          document.getElementById('response-0').checked = true;
+          // Request Problem Information
+          document.getElementById('problem-0').checked = true;
+          // Broker Port
+          document.getElementById('brokerPort').value = '1883';
+          // Keep A Live
+          document.getElementById('keepAliveTime').value = '60';
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>MQTT Client Configuration</h3><br>
+    <br>
+    <div><center>
+    <table border='1' cellpadding='4' cellspacing='0'>
+      <tbody>
+        <tr>
+          <td class='hd'>Name</td>
+          <td colspan='2'><input type='text' id='name'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Client ID</td>
+          <td colspan='2'><input type='text' id='clientID'></td>
+        </tr>
+        <tr height='25'>
+        </tr>
+        <tr>
+          <td class='hd'>Enable Connection</td>
+          <td><input name='enableConn' id='enableConn-0' type='radio'>  Disable</td>
+          <td><input name='enableConn' id='enableConn-1' type='radio'>  Enable</td>
+        </tr>
+        <tr style="display:none;">
+          <td class='hd'>Enable Encryption</td>
+          <td><input name='enableEncrypt' id='enableEncrypt-0' type='radio'>  Disable</td>
+          <td><input name='enableEncrypt' id='enableEncrypt-1' type='radio'>  Enable</td>
+        </tr>
+        <tr>
+          <td class='hd'>Clean Session</td>
+          <td><input name='cleanSession' id='cleanSession-0' type='radio'>  Disable</td>
+          <td><input name='cleanSession' id='cleanSession-1' type='radio'>  Enable</td>
+        </tr>
+        <tr>
+          <td class='hd'>Clean Start</td>
+          <td><input name='cleanStart' id='cleanStart-0' type='radio'>  Disable</td>
+          <td><input name='cleanStart' id='cleanStart-1' type='radio'>  Enable</td>
+        </tr>
+        <tr>
+          <td class='hd'>Request Response Information</td>
+          <td><input name='response' id='response-0' type='radio'>  Disable</td>
+          <td><input name='response' id='response-1' type='radio'>  Enable</td>
+        </tr>
+        <tr>
+          <td class='hd'>Request Problem Information</td>
+          <td><input name='problem' id='problem-0' type='radio'>  Disable</td>
+          <td><input name='problem' id='problem-1' type='radio'>  Enable</td>
+        </tr>
+        <tr height='25'>
+        </tr>
+        <tr>
+          <td class='hd'>Protocol Version</td>
+          <td colspan='2'>
+            <select id='protocolVersion'>
+              <option value='3.1'>3.1</option>
+              <option value='3.1.1'>3.1.1</option>
+              <option value='5.0' selected='selected'>5.0</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td class='hd'>Transport Protocol</td>
+          <td colspan='2'>
+            <select id='transportProtocol'>
+              <option value='TCP/IP' selected='selected'>TCP/IP</option>
+              <option value='TLS'>TLS</option>
+              <option value='WebSocket'>WebSocket</option>
+            </select>
+          </td>
+        </tr>
+        <tr height='25'>
+        </tr>
+        <tr>
+          <td class='hd'>Broker Address</td>
+          <td colspan='2'><input type='text' id='brokerAddress'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Broker Port</td>
+          <td colspan='2'><input type='text' id='brokerPort'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Username</td>
+          <td colspan='2'><input type='text' id='username'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Password</td>
+          <td colspan='2'><input type='password' id='password'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Keep Alive Time</td>
+          <td colspan='2'><input type='text' id='keepAliveTime'></td>
+        </tr>
+      </tbody>
+    </table>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+    </div>
+  </form>
+  </body>
+</html>

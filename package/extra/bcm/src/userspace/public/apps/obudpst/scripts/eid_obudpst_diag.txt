@@ -1,0 +1,5 @@
+BEGIN
+  eid         = EID_OBUDPST
+  name        = udpst
+  flags       = EIF_MESSAGING_CAPABLE
+END

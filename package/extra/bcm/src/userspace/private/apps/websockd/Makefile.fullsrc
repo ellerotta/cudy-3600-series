@@ -1,0 +1,168 @@
+#
+# In most cases, you only need to modify this first section.
+#
+
+EXE   = websockd
+OBJS  = wsd_system.o
+LIBS  = -lwebsockets
+
+all dynamic install : conditional_build
+
+clean: generic_clean launch_script_clean
+	rm -f $(INSTALL_DIR)/bin/$(EXE)
+
+binaryonly_dist_clean: clean generic_binaryonly_dist_clean
+	rm -f Makefile.fullsrc
+
+
+#
+# Set our CommEngine directory (by splitting the pwd into two words
+# at /userspace and taking the first word only).
+# Then include the common defines under CommEngine.
+# You do not need to modify this part.
+#
+CURR_DIR := $(shell pwd)
+BUILD_DIR:=$(subst /userspace, ,$(CURR_DIR))
+BUILD_DIR:=$(word 1, $(BUILD_DIR))
+
+include $(BUILD_DIR)/make.common
+
+ifneq ($(strip $(BUILD_BRCM_OPENWRT)),)
+OBJS += wsd_main_openwrt.o
+LIBS += -lubox -lubus -lblobmsg_json
+LIB_RPATH := $(INSTALL_DIR)/usr/lib
+CFLAGS += -DCONFIG_BRCM_OPENWRT
+else
+OBJS += wsd_main.o
+endif
+
+ifneq ($(strip $(BUILD_BRCM_CMS))$(strip $(BUILD_BRCM_BDK)),)
+LIBS += -lcms_dal -lcms_msg $(CMS_COMMON_LIBS) $(CMS_CORE_LIBS)
+endif
+
+ifneq ($(strip $(BUILD_BRCM_OPENWRT)),)
+launch_script_install:
+	mkdir -p $(INSTALL_DIR)/etc/init.d
+	mkdir -p $(INSTALL_DIR)/etc/rc.d
+	install scripts/websockd $(INSTALL_DIR)/etc/init.d
+	(cd $(INSTALL_DIR)/etc/rc.d; rm -f S98websockd K10websockd; ln -s ../init.d/websockd S98websockd; ln -s ../init.d/websockd K10websockd;)
+launch_script_clean:
+	rm -f $(INSTALL_DIR)/etc/init.d/websockd
+	rm -f $(INSTALL_DIR)/etc/rc.d/S98websockd
+	rm -f $(INSTALL_DIR)/etc/rc.d/K10websockd
+else
+launch_script_install:
+	@echo "Skipping (CMS need not websockd init script)"
+launch_script_clean:
+	@echo "Skipping (CMS need not this action)"
+endif
+
+
+ifeq ($(strip $(BRCM_USER_SSP)),y)
+LIBS   += -L$(INSTALL_DIR)/lib $(SSP_LIBS) 
+CFLAGS += $(SSP_TYP_COMPILER_OPTS)
+endif
+
+ifneq ($(strip $(BUILD_DPI)),)
+OBJS += wsd_dpi.o
+LIBS += -ldpictl
+endif
+
+ifneq ($(strip $(BUILD_SPDSVC)),)
+ifneq ($(strip $(BUILD_BRCM_OPENWRT)),)
+OBJS += wsd_spdsvc_openwrt.o
+else
+OBJS += wsd_spdsvc.o
+endif
+endif
+
+ifneq ($(strip $(BUILD_FCCTL)),)
+OBJS  +=  wsd_flowstats.o
+LIBS += -lfcctl
+endif
+
+ifneq ($(strip $(BUILD_BRCM_CMS))$(strip $(BUILD_BRCM_BDK)),)
+ifneq ($(strip $(DO_BUILD_OPENSSL))$(strip $(COND_HAVE_OPENSSL)),)
+ifneq ($(strip $(BUILD_WEB_SOCKETS)),)
+conditional_build: $(EXE) generic_exe_install launch_script_install
+else
+conditional_build: sanity_check
+	@echo "Skipping $(EXE) (not configured)"
+endif
+else
+conditional_build: sanity_check
+	@echo "Skipping $(EXE) (OpenSSL not configured)"
+endif
+else
+conditional_build: sanity_check
+	@echo "Skipping $(EXE) (CMS not configured)"
+endif
+
+
+#
+# Private apps and libs are allowed to include from private and public.
+#
+# WARNING: Do not modify this section unless you understand the
+# license implications of what you are doing.
+#
+ALLOWED_INCLUDE_PATHS := -I. -I..\
+                         -I$(SHARED_DIR)/opensource/include/bcm963xx/ \
+                         -I$(BUILD_DIR)/userspace/public/libs/bcm_util \
+                         -I$(BUILD_DIR)/userspace/public/include  \
+                         -I$(BUILD_DIR)/userspace/public/include/$(OALDIR) \
+                         -I$(BUILD_DIR)/userspace/private/include  \
+                         -I$(BUILD_DIR)/userspace/private/include/$(OALDIR) \
+                         -I$(BCM_FSBUILD_DIR)/public/include \
+                         -I$(BCM_FSBUILD_DIR)/private/include \
+                         -I$(INC_BRCMDRIVER_PUB_PATH)/$(BRCM_BOARD) \
+                         -I$(INC_BRCMDRIVER_PRIV_PATH)/$(BRCM_BOARD)
+
+
+#
+# Private apps and libs are allowed to link with libraries from the
+# private and public directories.
+#
+# WARNING: Do not modify this section unless you understand the
+# license implications of what you are doing.
+#
+ALLOWED_LIB_DIRS := /lib:/lib/private:/lib/public
+
+
+# Set flags if user wants to link with OpenSSL
+ifneq ($(strip $(DO_BUILD_OPENSSL))$(strip $(COND_HAVE_OPENSSL)),)
+CFLAGS += -DUSE_SSL -DORIGINAL_OPENSSL
+LIBS += -lssl -lcrypto -L$(BCM_FSBUILD_DIR)/lib -L$(BCM_FSBUILD_DIR)/public/lib
+endif
+
+# Only link with httpdshared if BUILD_BRCM_CMS is empty
+ifeq ($(strip $(BUILD_BRCM_CMS)),)
+ALLOWED_INCLUDE_PATHS += -I$(BUILD_DIR)/userspace/public/libs/httpdshared
+LIBS += -lhttpdshared
+endif
+
+
+ifeq ($(strip $(DEBUG)),true)
+CFLAGS+=-DDEBUGSSL
+endif
+
+# treat all warnings as errors
+CUSTOM_CFLAGS += -Werror -Wfatal-errors
+
+
+#
+# Implicit rule will make the .c into a .o
+# Implicit rule is $(CC) -c $(CPPFLAGS) $(CFLAGS)
+# See Section 10.2 of Gnu Make manual
+# 
+$(EXE): $(OBJS)
+	$(CC) $(BCM_LD_FLAGS) -o $@ $(OBJS) $(CMS_RPATH_OPTION) $(CMS_LIB_PATH) $(LIBS)
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)
+
+
+# For debugging the Makefile
+shell:
+	bash -i

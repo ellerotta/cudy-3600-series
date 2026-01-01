@@ -1,0 +1,21 @@
+OBJS := fcctl.o fcctl_cmds.o
+
+LIBS := -lfcctl
+
+#CFLAGS += -Werror -Wfatal-errors
+CFLAGS += -Wfatal-errors
+CFLAGS += $(TARGET_EXTRA_INCLUDE)
+
+$(EXE): $(OBJS)
+	$(CC) $(BCM_LD_FLAGS) -o $@ $(OBJS) $(CMS_RPATH_OPTION) $(CMS_LIB_PATH) $(LIBS) $(TARGET_LDFLAGS)
+
+
+binaryonly_prepare:
+	-cp $(EXE) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:.o=.d)

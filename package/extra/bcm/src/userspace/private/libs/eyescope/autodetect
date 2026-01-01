@@ -1,0 +1,2 @@
+condition: ifneq ($(strip $(BUILD_SERDES_VI)),)
+dependson: public/libs/cjson

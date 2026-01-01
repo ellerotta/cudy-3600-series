@@ -1,0 +1,9 @@
+
+config board 'board'
+	# Hardware specs
+	option hasEthWan '1'
+	# DSL PON WIFI SF/Runner Ethernet
+	option ethernetPortNames 'LAN1 LAN2 WAN'
+	option ethernetPortOrder 'eth1 eth2 eth0'
+	option ethernetLanPorts 'eth1 eth2'
+	option ethernetWanPort 'eth0'

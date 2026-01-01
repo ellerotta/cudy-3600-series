@@ -1,0 +1,75 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Controller Trust Challenges</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+
+      function addClick() {
+        var loc = 'ctchallengecfg.cgi?uspAction=add';
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function editClick(val) {
+        var loc = 'ctchallengecfg.cgi?uspAction=edit&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function removeClick(rml) {
+        var lst = '';
+
+        if (rml.length > 0)
+          for (i = 0; i < rml.length; i++) {
+            if ( rml[i].checked == true )
+              lst += rml[i].value + '|';
+          }
+        else if ( rml.checked == true )
+          lst = rml.value;
+
+        var loc = 'ctchallengetbl.cgi?uspAction=remove&uspInfo=' + lst;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+    </script>
+  </head>
+  <body>
+  <form>
+    <center><h3>Controller Trust Challenges</h3><br>
+    <div><center>
+    <table id='challengeTbl' border='1' cellpadding='4' cellspacing='0'>
+      <tbody>
+        <tr align='center'>
+          <td class='hd'>Enable</td>
+          <td class='hd'>Alias</td>
+          <td class='hd'>Description</td>
+          <td class='hd'>Role</td>
+          <td class='hd'>Type</td>
+          <td class='hd'>Value Type</td>
+          <td class='hd'>Instruction</td>
+          <td class='hd'>Instruction Type</td>
+          <td class='hd'>Retries</td>
+          <td class='hd'>Lockout Period</td>
+          <td class='hd'>Edit</td>
+          <td class='hd'>Remove</td>
+        </tr>
+<%ejGetOther(uspGetCTChallengeTable)%>
+      </tbody>
+    </table>
+    <br><br>
+    <input type='button' value='Add' onclick='addClick()'>
+    <input type='button' value='Remove' onclick='removeClick(this.form.rml)'>
+    <br><br>
+    </div>
+  </form>
+  </body>
+</html>

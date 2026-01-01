@@ -1,0 +1,35 @@
+OBJS := mdm2_oidInfoArray.o \
+        mdm2_initdsl.o \
+        rcl_dslcomp.o stl_dslcomp.o \
+        rcl2_atm.o \
+        stl2_atm.o \
+        rut2_atm.o \
+        rcl2_ptm.o \
+        stl2_ptm.o \
+        rut2_ptm.o \
+        rcl2_dsl.o \
+        stl2_dsl.o \
+        rut2_dsl.o \
+        rcl2_dslbonding.o \
+        stl2_dslbonding.o
+
+ifeq ($(strip $(BRCM_PHY_GFAST)),y)
+OBJS += rcl2_fast.o stl2_fast.o rut2_fast.o
+endif
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive
+
+
+binaryonly_prepare:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

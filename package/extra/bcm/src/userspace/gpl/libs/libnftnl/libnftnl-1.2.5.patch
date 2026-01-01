@@ -1,0 +1,160 @@
+--- orig_libnftnl-1.1.7/src/expr_ops.c	2020-06-05 19:21:59.325748946 +0800
++++ libnftnl-1.1.7/src/expr_ops.c	2020-11-20 14:54:26.876799182 +0800
+@@ -41,6 +41,7 @@
+ extern struct expr_ops expr_ops_tunnel;
+ extern struct expr_ops expr_ops_osf;
+ extern struct expr_ops expr_ops_xfrm;
++extern struct expr_ops expr_ops_bcm_ext;
+ 
+ static struct expr_ops expr_ops_notrack = {
+ 	.name	= "notrack",
+@@ -85,6 +86,7 @@
+ 	&expr_ops_tunnel,
+ 	&expr_ops_osf,
+ 	&expr_ops_xfrm,
++	&expr_ops_bcm_ext,
+ 	NULL,
+ };
+ 
+--- orig_libnftnl-1.1.7/src/Makefile.am	2020-06-05 19:21:59.321748947 +0800
++++ libnftnl-1.1.7/src/Makefile.am	2020-11-20 14:56:00.598552836 +0800
+@@ -49,6 +49,7 @@
+ 		      expr/queue.c	\
+ 		      expr/quota.c	\
+ 		      expr/reject.c	\
++		      expr/bcm_extend.c	\
+ 		      expr/rt.c		\
+ 		      expr/target.c	\
+ 		      expr/tunnel.c	\
+--- orig_libnftnl-1.1.7/include/libnftnl/expr.h	2020-06-05 19:21:59.317748948 +0800
++++ libnftnl-1.1.7/include/libnftnl/expr.h	2020-11-20 14:57:36.432445142 +0800
+@@ -214,6 +214,10 @@
+ };
+ 
+ enum {
++	NFTNL_EXPR_BCM_EXT_TEXT	= NFTNL_EXPR_BASE,
++};
++
++enum {
+ 	NFTNL_EXPR_QUEUE_NUM	= NFTNL_EXPR_BASE,
+ 	NFTNL_EXPR_QUEUE_TOTAL,
+ 	NFTNL_EXPR_QUEUE_FLAGS,
+--- orig_libnftnl-1.1.7/src/expr/bcm_extend.c	1970-01-01 08:00:00.000000000 +0800
++++ libnftnl-1.1.7/src/expr/bcm_extend.c	2020-11-23 10:39:11.461797338 +0800
+@@ -0,0 +1,116 @@
++#include <stdio.h>
++#include <stdint.h>
++#include <string.h>
++#include <arpa/inet.h>
++#include <errno.h>
++#include <linux/netfilter/nf_tables.h>
++
++#include "internal.h"
++#include <libmnl/libmnl.h>
++#include <libnftnl/expr.h>
++#include <libnftnl/rule.h>
++
++enum nft_bcm_ext_attributes {
++	NFTA_BCM_EXT_UNSPEC,
++	NFTA_BCM_EXT_TEXT,
++	__NFTA_BCM_EXT_MAX,
++};
++
++#define NFTA_BCM_EXT_MAX (__NFTA_BCM_EXT_MAX - 1)
++struct nftnl_expr_bcm_ext {
++	const char		*text;
++};
++
++static int nftnl_expr_bcm_ext_set(struct nftnl_expr *e, uint16_t type,
++				 const void *data, uint32_t data_len)
++{
++	struct nftnl_expr_bcm_ext *bcm_ext = nftnl_expr_data(e);
++	switch(type){
++	case NFTNL_EXPR_BCM_EXT_TEXT:
++		bcm_ext->text = strdup(data);
++		if (!bcm_ext->text)
++			return -1;
++		break;
++	}
++	return 0;
++}
++
++static const void *
++nftnl_expr_bcm_ext_get(const struct nftnl_expr *e, uint16_t type,
++		      uint32_t *data_len)
++{
++	struct nftnl_expr_bcm_ext *bcm_ext = nftnl_expr_data(e);
++	switch(type) {
++	case NFTNL_EXPR_BCM_EXT_TEXT:
++		*data_len = strlen(bcm_ext->text)+1;
++		return bcm_ext->text;
++	}
++	return NULL;
++}
++
++static int nftnl_expr_bcm_ext_cb(const struct nlattr *attr, void *data)
++{
++	const struct nlattr **tb = data;
++	int type = mnl_attr_get_type(attr);
++
++	if (mnl_attr_type_valid(attr, NFTA_BCM_EXT_MAX) < 0)
++		return MNL_CB_OK;
++
++	switch(type) {
++	case NFTNL_EXPR_BCM_EXT_TEXT:
++		if (mnl_attr_validate(attr, MNL_TYPE_STRING) < 0)
++			abi_breakage();
++		break;
++	}
++
++	tb[type] = attr;
++	return MNL_CB_OK;
++}
++
++static void
++nftnl_expr_bcm_ext_build(struct nlmsghdr *nlh, const struct nftnl_expr *e)
++{
++	struct nftnl_expr_bcm_ext *bcm_ext = nftnl_expr_data(e);
++	if (e->flags & (1 << NFTNL_EXPR_BCM_EXT_TEXT))
++		mnl_attr_put_strz(nlh, NFTNL_EXPR_BCM_EXT_TEXT, bcm_ext->text);
++}
++
++static int
++nftnl_expr_bcm_ext_parse(struct nftnl_expr *e, struct nlattr *attr)
++{
++	struct nftnl_expr_bcm_ext *bcm_ext = nftnl_expr_data(e);
++	struct nlattr *tb[NFTA_BCM_EXT_MAX+1] = {};
++	if (mnl_attr_parse_nested(attr, nftnl_expr_bcm_ext_cb, tb) < 0)
++		return -1;
++
++	if (tb[NFTNL_EXPR_BCM_EXT_TEXT]) {
++		if (bcm_ext->text)
++			xfree(bcm_ext->text);
++
++		bcm_ext->text = strdup(mnl_attr_get_str(tb[NFTNL_EXPR_BCM_EXT_TEXT]));
++		if (!bcm_ext->text)
++			return -1;
++		e->flags |= (1 << NFTNL_EXPR_BCM_EXT_TEXT);
++	}
++
++	return 0;
++}
++
++static void nftnl_expr_bcm_ext_free(const struct nftnl_expr *e)
++{
++	struct nftnl_expr_bcm_ext *bcm_ext = nftnl_expr_data(e);
++
++	xfree(bcm_ext->text);
++}
++
++
++struct expr_ops expr_ops_bcm_ext = {
++	.name		= "bcm_ext",
++	.alloc_len	= sizeof(struct nftnl_expr_bcm_ext),
++	.max_attr	= NFTA_BCM_EXT_MAX,
++	.free		= nftnl_expr_bcm_ext_free,
++	.set		= nftnl_expr_bcm_ext_set,
++	.get		= nftnl_expr_bcm_ext_get,
++	.parse		= nftnl_expr_bcm_ext_parse,
++	.build		= nftnl_expr_bcm_ext_build,
++};

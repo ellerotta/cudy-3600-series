@@ -1,0 +1,25 @@
+--- dnsmasq-2.89-orig/Makefile	2023-02-15 11:19:02.353902979 +0800
++++ dnsmasq-2.89/Makefile	2023-02-15 11:22:24.513907568 +0800
+@@ -24,7 +24,7 @@ MANDIR        = $(PREFIX)/share/man
+ LOCALEDIR     = $(PREFIX)/share/locale
+ BUILDDIR      = $(SRC)
+ DESTDIR       = 
+-CFLAGS        = -Wall -W -O2
++CFLAGS        = -Wall -W -O2 -std=c99
+ LDFLAGS       = 
+ COPTS         = 
+ RPM_OPT_FLAGS = 
+@@ -74,9 +74,10 @@ nft_cflags =    `echo $(COPTS) | $(top)/
+ nft_libs =      `echo $(COPTS) | $(top)/bld/pkg-wrapper HAVE_NFTSET $(PKG_CONFIG) --libs libnftables`
+ version =       -DVERSION='\"`$(top)/bld/get-version $(top)`\"'
+ 
+-sum?=$(shell $(CC) -DDNSMASQ_COMPILE_OPTS $(COPTS) -E $(top)/$(SRC)/dnsmasq.h | ( md5sum 2>/dev/null || md5 ) | cut -f 1 -d ' ')
+-sum!=$(CC) -DDNSMASQ_COMPILE_OPTS $(COPTS) -E $(top)/$(SRC)/dnsmasq.h | ( md5sum 2>/dev/null || md5 ) | cut -f 1 -d ' '
+-copts_conf = .copts_$(sum)
++# brcm: disable the following lines since cross-compiling
++#sum?=$(shell $(CC) -DDNSMASQ_COMPILE_OPTS $(COPTS) -E $(top)/$(SRC)/dnsmasq.h | ( md5sum 2>/dev/null || md5 ) | cut -f 1 -d ' ')
++#sum!=$(CC) -DDNSMASQ_COMPILE_OPTS $(COPTS) -E $(top)/$(SRC)/dnsmasq.h | ( md5sum 2>/dev/null || md5 ) | cut -f 1 -d ' '
++#copts_conf = .copts_$(sum)
+ 
+ objs = cache.o rfc1035.o util.o option.o forward.o network.o \
+        dnsmasq.o dhcp.o lease.o rfc2131.o netlink.o dbus.o bpf.o \

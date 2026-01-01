@@ -1,0 +1,162 @@
+--- blkpg-part/blkpg-part.c	2021-10-10 11:55:10.000000000 -0700
++++ blkpg-part/blkpg-part.c	2023-01-26 11:41:28.009739303 -0800
+@@ -1,3 +1,4 @@
++
+ /*
+  * Copyright 2021 Gaël PORTAY
+  *           2018 Savoir-Faire Linux Inc.
+@@ -122,9 +123,12 @@
+ 		.datalen = sizeof(data),
+ 		.data = &data,
+ 	};
+-	int argi, fd, ret = EXIT_FAILURE;
++	int argi = 0;
++	int fd, ret = EXIT_FAILURE;
+ 	char *e;
+-	long l;
++	long long l = 0;
++
++	memset(&data, 0, sizeof(struct blkpg_partition));
+ 
+ 	argi = parse_arguments(&options, argc, argv);
+ 	if (argi < 0) {
+@@ -174,19 +178,12 @@
+ 	}
+ 
+ 	argi++;
+-	l = strtol(argv[argi], &e, 0);
+-	if (*e) {
+-		fprintf(stderr, "Error: %s: Invalid argument!\n",
+-			argv[argi]);
+-		ret = EXIT_FAILURE;
+-		goto exit;
+-	}
+-	data.pno = l;
++	data.pno = atoi(argv[argi]);
+ 
+ 	if ((req.op == BLKPG_ADD_PARTITION) ||
+ 	    (req.op == BLKPG_RESIZE_PARTITION)) {
+ 		argi++;
+-		l = strtol(argv[argi], &e, 0);
++		l = strtoll(argv[argi], &e, 0);
+ 		if (*e) {
+ 			fprintf(stderr, "Error: %s: Invalid argument!\n",
+ 				argv[argi]);
+@@ -196,7 +193,7 @@
+ 		data.start = l;
+ 
+ 		argi++;
+-		l = strtol(argv[argi], &e, 0);
++		l = strtoll(argv[argi], &e, 0);
+ 		if (*e) {
+ 			fprintf(stderr, "Error: %s: Invalid argument!\n",
+ 				argv[argi]);
+--- blkpg-part/Makefile.orig	2021-10-10 11:55:10.000000000 -0700
++++ blkpg-part/Makefile	2023-01-26 12:10:27.774937072 -0800
+@@ -1,84 +1,25 @@
+-#
+-# Copyright 2018 Savoir-Faire Linux Inc.
+-#
+-# SPDX-License-Identifier: GPL-2.0
+-#
+-
+-PREFIX ?= /usr/local
+-CPPCHECKFLAGS ?=
+-
+-VERSION ?= $(shell git describe --always --all)
+-
+-override CFLAGS += -DVERSION_STRING='"$(VERSION)"'
+-
+-.PHONY: all
+-all: blkpg-part
+-
+-.PHONY: doc
+-doc: blkpg-part.1.gz
+-
+-.PHONY: install
+-install:
+-	install -d $(DESTDIR)$(PREFIX)/sbin/
+-	install -m 755 blkpg-part $(DESTDIR)$(PREFIX)/sbin/
+-
+-.PHONY: install-doc
+-install-doc:
+-	install -d $(DESTDIR)$(PREFIX)/share/man/man1/
+-	install -m 644 blkpg-part.1.gz $(DESTDIR)$(PREFIX)/share/man/man1/
+-
+-.PHONY: install-bash-completion
+-install-bash-completion:
+-	completionsdir=$$(pkg-config --variable=completionsdir bash-completion); \
+-	if [ -n "$$completionsdir" ]; then \
+-		install -d $(DESTDIR)$$completionsdir/; \
+-		install -m 644 support/bash-completion \
+-		        $(DESTDIR)$$completionsdir/blkpg-part; \
+-	fi
+-
+-.PHONY: uninstall
+-uninstall:
+-	rm -f $(DESTDIR)$(PREFIX)/sbin/blkpg-part
+-	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/blkpg-part.1.gz
+-	completionsdir=$$(pkg-config --variable=completionsdir bash-completion); \
+-	if [ -n "$$completionsdir" ]; then \
+-		rm -f $(DESTDIR)$$completionsdir/blkpg-part; \
+-	fi
+-
+-.PHONY: user-install
+-user-install:
+-	$(MAKE) install PREFIX=$$HOME/.local
+-
+-.PHONY: tests
+-tests: blkpg-part libmock.so
+-	@./tests.sh
+-
+-.PHONY: check
+-check: override CPPCHECKFLAGS += --enable=all --error-exitcode=1 --std=posix
+-check: override CPPCHECKFLAGS += -DVERSION_STRING='"$(VERSION)"'
+-check: blkpg-part.c
+-	cppcheck $(CPPCHECKFLAGS) $^
+-
+-.PHONY: clean
+-clean:
+-	rm -f blkpg-part libmock.so
+-
+-LINK.so = $(LINK.o)
+-lib%.so: override LDFLAGS += -shared
+-
+-lib%.so: %.o
+-	$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+-
+-lib%.so: %.c
+-	$(LINK.c) $^ $(LOADLIBES) $(LDLIBS) -o $@
+-
+-COMPILE.i = $(CC) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -E
+-%.i: %.c
+-	$(COMPILE.i) $(OUTPUT_OPTION) $<
++EXE  = blkpg-part
+ 
+-%.1: %.1.adoc
+-	asciidoctor -b manpage -o $@ $<
++OBJS = blkpg-part.o
+ 
+-%.gz: %
+-	gzip -c $^ >$@
+ 
++all install : $(EXE)
++	mkdir -p $(PREFIX)/bin
++	install -p -m 755 $(EXE) $(PREFIX)/bin
++
++
++$(EXE): $(OBJS)
++	$(CC) $(BCM_LD_FLAGS) -o $@ $(OBJS) $(CMS_OPTION_RPATH)
++
++clean: 
++	-rm -f *.o *.d $(EXE) $(PREFIX)/bin/$(EXE) 
++
++
++# Set VPATH because we want to compile in a seperate dir than source.
++name := $(lastword $(MAKEFILE_LIST))
++mdir := $(realpath $(dir $(name)))
++VPATH=$(mdir)
++
++# Generate and use dependencies.
++CFLAGS += -MD
++-include $(OBJS:%.o=%.d)

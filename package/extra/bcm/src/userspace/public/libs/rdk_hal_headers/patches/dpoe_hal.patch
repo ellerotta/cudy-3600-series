@@ -1,0 +1,111 @@
+diff --git a/dpoe_hal.h b/dpoe_hal.h
+index b1f49a6..dcc047f 100644
+--- a/dpoe_hal.h
++++ b/dpoe_hal.h
+@@ -134,6 +134,36 @@
+ #define RETURN_ERR   -1
+ #endif
+ 
++/*=== Begin BRCM BCA Add */
++#ifndef BOOL
++#define BOOL  unsigned char
++#endif
++
++#ifndef RETURN_NO_MORE
++#define RETURN_NO_MORE 1
++#endif
++
++#ifndef HAL_IFNAME_LEN
++#define HAL_IFNAME_LEN          32
++#endif
++
++#ifndef HAL_IPV4_ADDR_STR_LEN
++#define HAL_IPV4_ADDR_STR_LEN   16
++#endif
++
++#ifndef HAL_IPV6_ADDR_STR_LEN
++#define HAL_IPV6_ADDR_STR_LEN   46
++#endif
++
++#ifndef HAL_IPVX_ADDR_STR_LEN
++#define HAL_IPVX_ADDR_STR_LEN   50
++#endif
++
++#ifndef HAL_IF_FULLPATH_LEN
++#define HAL_IF_FULLPATH_LEN     256
++#endif
++/*=== End BRCM BCA Add */
++
+ #define DPOE_HAL_MAJOR_VERSION 1         //!< This is the major version of this HAL.
+ #define DPOE_HAL_MINOR_VERSION 0         //!< This is the minor version of the HAL.
+ #define DPOE_HAL_MAINTENANCE_VERSION 1   //!< This is the maintenance version of the HAL.
+@@ -681,6 +711,69 @@ INT dpoe_hal_Reboot_Ready(ULONG *pValue);
+ */
+ INT dpoe_hal_ReinitMac();
+ 
++
++/*=== Begin BRCM BCA Add */
++#ifndef EPON_LINK_MAX_ADD_DATA_LEN
++#define EPON_LINK_MAX_ADD_DATA_LEN     128
++#endif
++
++typedef struct
++{
++   char intfName[HAL_IFNAME_LEN];  /**< interface name */
++   BOOL isLayer3;    /**< is this a layer 3 interface. */
++   BOOL isLayer2;    /**< is this a layer 2 interface. */
++   BOOL isIpv4Up;    /**< 1 for UP, 0 for down. */
++   BOOL isIpv6Up;    /**< 1 for UP, 0 for down. */
++   BOOL isLinkUp;    /**< for layer 2 interface: 1 for UP, 0 for down. */
++   char ipv4Addr[HAL_IPV4_ADDR_STR_LEN]; /**< CIDR notation, e.g. 192.168.100.201 */
++   char ipv4Netmask[HAL_IPV4_ADDR_STR_LEN]; /**< CIDR notation, e.g. 255.255.255.0 */
++   char ipv4Gateway[HAL_IPV4_ADDR_STR_LEN]; /**< CIDR notation, e.g. 192.168.100.1 */
++   char ipv6GlobalAddr[HAL_IPV6_ADDR_STR_LEN]; /**< DCIDR notation, e.g. 2002::5/64 */
++   char ipv6NextHop[HAL_IPV6_ADDR_STR_LEN];  /**< next-hop or default route in IPv6 */
++   char dnsServers[HAL_IPVX_ADDR_STR_LEN*4]; /**< Up to 4 DNS servers received on this connection separated by commas. Servers could have come from ipv4 or v6 connection. */
++   char fullpath[HAL_IF_FULLPATH_LEN]; /**< TR181 fullpath of this interface. */
++   char additionalData[EPON_LINK_MAX_ADD_DATA_LEN]; /**< Additional data, must be in string format, must include null terminator. */
++} DpoeHalInterfaceStatus;
++
++/** DPoE HAL config struct, to be passed into bcm_epon_hal_init.
++ *  For now, this contains only callback functions, but we could add other
++ *  config params later.
++ *
++ *  startApp defines whether or not to start the application from HAL.
++ *  publishInterfaceStatus allows the DPoE HAL to notify the upper layer agent
++ *  of changes to interface status. pub=1 means publish the interface data.
++ *  pub=0 means unpublish the data (used when interface is deleted, note the
++ *  the interface deletion case does not exist in DPoE). This callback is
++ *  optional as the upper layer agent may choose to poll the interface status
++ *  from Linux.
++ *
++ *  publishKeyValue allows the DPoE HAL to publish various key value pairs to
++ *  the upper layer agent. It can be used for alarm/event notifications.
++ *  This callback is optional. (pub=0 means unpublish)
++ *  subscribeKey allows the DPoE HAL to subscribe to changes to any key/value
++ *  pair from the upper layer agent. This callback is optional, so if this
++ *  function pointer is NULL, all subscribe requests will fail. sub=1 means
++ *  subscribe, sub=0 means unsubscribe.
++ *  Optional: on successful subscribe, and value is non-null, the current value
++ *  will be returned.  On entry, valueLen indicates number of bytes pointed
++ *  to by value, on return, the actual number of bytes copied (including
++ *  null termination) is returned.
++ *  */
++typedef struct {
++   int startApp;
++   int (*publishInterfaceStatusFp)(int pub, const DpoeHalInterfaceStatus *status);
++   int (*publishKeyValueFp)(int pub, const char *key, const char *value);
++   int (*subscribeKeyFp)(int sub, const char *key, char *value, int *valueLen);
++   int (*configMessageFp)(void *msg);
++   unsigned int serverEid;  // EID of the upper layer agent (epon_md or json_hal_server), must be filled in by caller
++   void *serverMsgHandle;   // Created and returned by gpon_hal_init.
++} DpoeHalConfig;   
++
++
++INT dpoe_hal_init(DpoeHalConfig *dpoeHalCfg);
++/*=== End BRCM BCA Add */
++
++
+ /* Function: dpoe_GetProvIpType */
+ /*
+ * @description Retrieve the provisioned IP type.

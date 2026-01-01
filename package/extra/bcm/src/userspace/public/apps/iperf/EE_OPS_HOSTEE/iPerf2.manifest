@@ -1,0 +1,53 @@
+{
+  "app-name": "iPerf2",
+  "vendor": "NLANR/DAST",
+  "version": "1.2",
+  "description": "iPerf 2.0.9 Program",
+  "bus":
+  {
+    "wellknown-name": "com.broadcom.iperf",
+    "object-path": ["/com/broadcom/iperf"]
+  },
+  "process":
+  {
+    "args": [
+      "iPerf2"
+    ]
+  },
+  "linux":
+  {
+    "resources":
+    {
+      "cpu": {
+        "quota": 30
+      },
+      "memory": {
+        "limit": 50000000
+      },
+      "network-setup": {"mode":"Primary"},
+      "flash-size": "980KB"
+    },
+  },
+  "mounts": [
+    {
+       "destination": "/var/lib/dbus/machine-id",
+       "source": "/var/lib/dbus/machine-id",
+       "type": "none",
+       "options": ["rw", "bind", "create=file"]
+    },
+    {
+       "destination": "/var/run/dbus/system_bus_socket",
+       "source": "/var/run/dbus/system_bus_socket",
+       "type": "none",
+       "options": ["rw", "bind", "create=file"]
+    }
+  ],
+  "config":
+  {
+    "ExposedPorts":"5001/tcp,5001/udp"
+  },
+  "dependency":
+  {
+    "libraries": "crypt,pthread,rt,expat,ffi,dbus-1,z"
+  }
+}

@@ -1,0 +1,158 @@
+ diff -urN  orig_quagga-1.2.4/lib/prefix.h  quagga-1.2.4/lib/prefix.h
+--- orig_quagga-1.2.4/lib/prefix.h	2018-02-25 16:48:06.425391420 +0800
++++ quagga-1.2.4/lib/prefix.h	2018-02-25 16:50:04.614618650 +0800
+@@ -44,7 +44,7 @@
+  */
+ struct ethaddr {
+     u_char octet[ETHER_ADDR_LEN];
+-} __packed;
++} __attribute__((packed));
+ 
+ 
+ /*
+ diff -urN  orig_quagga-1.2.4/lib/thread.c  quagga-1.2.4/lib/thread.c
+--- orig_quagga-1.2.4/lib/thread.c	2018-02-20 05:24:55.000000000 +0800
++++ quagga-1.2.4/lib/thread.c	2021-03-17 13:26:00.973022094 +0800
+@@ -531,6 +531,10 @@
+       return NULL;
+     }
+ 
++  rv->ready.name = "ready";
++  rv->event.name = "event";
++  rv->unuse.name = "unuse";
++
+   rv->fd_limit = (int)limit.rlim_cur;
+   rv->read = XCALLOC (MTYPE_THREAD, sizeof (struct thread *) * rv->fd_limit);
+   if (rv->read == NULL)
+@@ -560,6 +564,11 @@
+ static void
+ thread_list_add (struct thread_list *list, struct thread *thread)
+ {
++  if (thread->list) {
++      zlog_err("%s:%d: thread_list_add INCONSISTENCY thread %p is already linked in list %s", __FILE__, __LINE__, thread, thread->list->name);
++      assert(!thread->list);
++  }
++
+   thread->next = NULL;
+   thread->prev = list->tail;
+   if (list->tail)
+@@ -568,22 +577,57 @@
+     list->head = thread;
+   list->tail = thread;
+   list->count++;
++  thread->list = list;
+ }
+ 
+ /* Delete a thread from the list. */
+ static struct thread *
+ thread_list_delete (struct thread_list *list, struct thread *thread)
+ {
++  if (!thread->list) {
++      zlog_err("%s:%d: thread_list_delete INCONSISTENCY thread %p is NOT linked in a list", __FILE__, __LINE__, thread);
++      assert(thread->list);
++  }
++
++  if (thread->list && thread->list != list) {
++      zlog_err("%s:%d: thread_list_delete INCONSISTENCY thread %p is linked in list %s but should be removed from list %s",
++      __FILE__, __LINE__, thread, thread->list->name, list->name);
++      assert(thread->list == list);
++  }
++
+   if (thread->next)
+     thread->next->prev = thread->prev;
+-  else
++  else {
++    if (list->tail != thread) {
++      zlog_debug("%s:%d: thread_list_delete INCONSISTENCY thread %p has no successor but list->tail points to %p in list %s",
++      __FILE__, __LINE__, thread, list->tail, list->name);
++      assert(list->tail == thread);
++    }
++
+     list->tail = thread->prev;
++    if (list->tail)
++      list->tail->next = NULL;
++  }
++
+   if (thread->prev)
+     thread->prev->next = thread->next;
+-  else
++  else {
++    if (list->head != thread) {
++      zlog_debug("%s:%d: thread_list_delete INCONSISTENCY thread %p has no predecessor but list->head points to %p in list %s",
++      __FILE__, __LINE__, thread, list->head, list->name);
++      assert(list->head == thread);
++    }
++
+     list->head = thread->next;
+-  thread->next = thread->prev = NULL;
++    if (list->head)
++	list->head->prev = NULL;
++  }
++
+   list->count--;
++
++  thread->next = thread->prev = NULL;
++  thread->list = NULL;
++
+   return thread;
+ }
+ 
+@@ -603,10 +647,12 @@
+ static void
+ thread_add_unuse (struct thread *thread)
+ {
+-  thread->type = THREAD_UNUSED;
+   assert (thread->master != NULL && thread != NULL);
++  assert (thread_current != thread);
+   assert (thread->next == NULL);
+   assert (thread->prev == NULL);
++  assert (thread->list == NULL);
++  thread->type = THREAD_UNUSED;
+   thread_list_add (&thread->master->unuse, thread);
+ }
+ 
+@@ -948,7 +994,15 @@
+   struct thread_list *list = NULL;
+   struct pqueue *queue = NULL;
+   struct thread **thread_array = NULL;
+-  
++ 
++  /*
++   * we cannot cancel ourself when running.
++   * cancellation of ourself would lead to a double entry attempt
++   * into the unuse list.
++   */
++  if (thread_current == thread)
++	return;
++
+   switch (thread->type)
+     {
+     case THREAD_READ:
+@@ -1175,7 +1229,7 @@
+       exceptfd = fd_copy_fd_set(m->exceptfd);
+       
+       /* Calculate select wait timer if nothing else to do */
+-      if (m->ready.count == 0)
++      if (thread_empty(&m->ready))
+         {
+           quagga_get_relative (NULL);
+           timer_wait = thread_timer_wait (m->timer, &timer_val);
+ diff -urN  orig_quagga-1.2.4/lib/thread.h  quagga-1.2.4/lib/thread.h
+--- orig_quagga-1.2.4/lib/thread.h	2018-02-20 05:24:55.000000000 +0800
++++ quagga-1.2.4/lib/thread.h	2021-03-17 13:23:16.074767319 +0800
+@@ -38,6 +38,7 @@
+ /* Linked list of thread. */
+ struct thread_list
+ {
++  const char    *name;
+   struct thread *head;
+   struct thread *tail;
+   int count;
+@@ -77,6 +78,7 @@
+   thread_type add_type;		/* thread type */
+   struct thread *next;		/* next pointer of the thread */   
+   struct thread *prev;		/* previous pointer of the thread */
++  struct thread_list *list;	/* current list we are queued in */
+   struct thread_master *master;	/* pointer to the struct thread_master. */
+   int (*func) (struct thread *); /* event function */
+   void *arg;			/* event argument */

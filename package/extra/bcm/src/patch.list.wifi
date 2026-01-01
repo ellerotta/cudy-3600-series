@@ -1,0 +1,4 @@
+- {csp: CS00000000, ref: SWBCACPE-60461, chg: 489735 } -# MODULESDIR should be /lib64 when using 64B and /lib in 32bits mode.
+- {csp: CS00000000, ref: SWBCACPE-60912, chg: 495077 } -# fix compiling error "WL_MAX_NUM_SSID" redefined when -Werror in CFLAGS.
+- {csp: CS00000000, ref: SWBCACPE-60792, chg: 504534 } -#
+- {csp: CS00000000, ref: SWBCACPE-62634, chg: 510971 } -# Support SVN twig for WLAN 23.2.2

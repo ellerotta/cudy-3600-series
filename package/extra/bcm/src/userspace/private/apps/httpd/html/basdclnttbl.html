@@ -1,0 +1,64 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>BAS Applications</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+
+      function editClick(val) {
+        var loc = 'basdclntcfg.cgi?basdAction=view&basdInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function startClick(val) {
+        var loc = 'basdclnttbl.cgi?basdAction=start&basdInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function stopClick(val) {
+        var loc = 'basdclnttbl.cgi?basdAction=stop&basdInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function restartClick(val) {
+        var loc = 'basdclnttbl.cgi?basdAction=restart&basdInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+    </script>
+  </head>
+  <body>
+  <form>
+    <center><h3>BAS Applications</h3><br>
+    <div><center>
+    <table id='clntTbl' border='1' cellpadding='4' cellspacing='0'>
+      <tbody>
+        <tr align='center'>
+          <td class='hd'>Name</td>
+          <td class='hd'>Status</td>
+          <td class='hd'>Arguments</td>
+          <td class='hd'>Edit</td>
+          <td class='hd'>Start/Stop</td>
+          <td class='hd'>Restart</td>
+        </tr>
+<%ejGetOther(basdGetClntTable)%>
+      </tbody>
+    </table>
+    <br><br>
+    </div>
+  </form>
+  </body>
+</html>

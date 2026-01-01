@@ -1,0 +1,14 @@
+--- # YAML format
+reference: '$File: //depot/CommEngine/patches/CustomBranches/Cudy/5.04L.04_P3/patch.version $'
+version: '5'
+release: '04'
+extraversion: '04p3'
+
+platforms_in_use:
+# one row per platform starting with hiphen+space e.g. - 63138
+- 6764
+- 6766
+
+patches:
+# one row per patch starting with hiphen+space e.g.:
+- {csp: CS00012355885, ref: SWBCACPE-61941, chg: CL505722} # update BCM6766/6765/6764 PMC firmware and BCM thermal driver

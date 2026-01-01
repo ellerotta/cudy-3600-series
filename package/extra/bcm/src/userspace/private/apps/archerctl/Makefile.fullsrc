@@ -1,0 +1,20 @@
+OBJS := archer_ctl.o
+
+LIBS := -larcher
+
+
+$(EXE): $(OBJS)
+	$(CC) $(BCM_LD_FLAGS) -o $@ $(OBJS) \
+         -Wl,-unresolved-symbols=ignore-in-shared-libs $(CMS_OPTION_RPATH) \
+         $(CMS_LIB_PATH) $(LIBS) $(LDFLAGS)
+
+
+binaryonly_prepare:
+	-cp $(EXE) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

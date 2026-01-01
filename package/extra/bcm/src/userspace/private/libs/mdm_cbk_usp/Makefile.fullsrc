@@ -1,0 +1,26 @@
+OBJS := mdm2_oidInfoArray.o mdm2_init_usp.o \
+        rcl_uspcomp.o stl_uspcomp.o \
+        rcl2_uspAgent.o stl2_uspAgent.o \
+        rcl2_uspController.o stl2_uspController.o \
+        rcl2_stomp.o stl2_stomp.o \
+        rcl2_mqtt.o stl2_mqtt.o \
+        rcl2_bulkdata.o stl2_bulkdata.o \
+        rcl2_cwmpUspAgent.o stl2_cwmpUspAgent.o \
+        rcl2_cwmpUspController.o stl2_cwmpUspController.o
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive
+
+
+binaryonly_prepare:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

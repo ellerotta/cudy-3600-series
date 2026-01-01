@@ -1,0 +1,3024 @@
+diff -urN wide-dhcpv6-20080615-coverity/addrconf.c dhcpv6/addrconf.c
+--- wide-dhcpv6-20080615-coverity/addrconf.c	2008-06-15 15:48:40.000000000 +0800
++++ dhcpv6/addrconf.c	2022-08-09 18:11:57.669492025 +0800
+@@ -95,12 +95,17 @@
+     struct dhcp6_eventdata **, struct dhcp6_eventdata *));
+ static void na_renew_data_free __P((struct dhcp6_eventdata *));
+ 
+-static struct dhcp6_timer *addr_timo __P((void *));
++struct dhcp6_timer *addr_timo __P((void *));
+ 
+ static int na_ifaddrconf __P((ifaddrconf_cmd_t, struct statefuladdr *));
+ 
+ extern struct dhcp6_timer *client6_timo __P((void *));
+ 
++//brcm
++extern struct dhcp6_timer *siteprefix_timo __P((void *));
++extern LIST_HEAD(, dhcp6_timer) timer_head;
++
++
+ int
+ update_address(ia, addr, dhcpifp, ctlp, callback)
+ 	struct ia *ia;
+@@ -354,13 +359,14 @@
+ 	free(ial);
+ }
+ 
+-static struct dhcp6_timer *
++struct dhcp6_timer *
+ addr_timo(arg)
+ 	void *arg;
+ {
+ 	struct statefuladdr *sa = (struct statefuladdr *)arg;
+ 	struct ia *ia;
+ 	void (*callback)__P((struct ia *));
++	struct dhcp6_timer *tm, *tm_next;
+ 
+ 	dprintf(LOG_DEBUG, FNAME, "address timeout for %s",
+ 	    in6addr2str(&sa->addr.addr, 0));
+@@ -372,6 +378,17 @@
+ 		dhcp6_remove_timer(&sa->timer);
+ 
+ 	remove_addr(sa);
++	sendDhcp6cEventMessage();
++
++	for (tm = LIST_FIRST(&timer_head); tm; tm = tm_next) {
++		tm_next = LIST_NEXT(tm, link);
++
++		/* brcm: pass cdrouter dhcpv6_4 */
++		if (tm->expire == siteprefix_timo) {
++			ia->no6cRestart = 1;
++			break;
++		}
++	}
+ 
+ 	(*callback)(ia);
+ 
+@@ -394,6 +411,11 @@
+ #endif
+ 	sin6.sin6_addr = addr->addr;
+ 
++#if 1 /* brcm: TODO: should be done in CMS */
++	return (ifaddrconf(cmd, sa->dhcpif->ifname, &sin6, 64,
++	    addr->pltime, addr->vltime));
++#else
+ 	return (ifaddrconf(cmd, sa->dhcpif->ifname, &sin6, 128,
+ 	    addr->pltime, addr->vltime));
++#endif
+ }
+diff -urN wide-dhcpv6-20080615-coverity/cfparse.y dhcpv6/cfparse.y
+--- wide-dhcpv6-20080615-coverity/cfparse.y	2022-08-11 18:15:29.736878817 +0800
++++ dhcpv6/cfparse.y	2022-08-11 18:17:12.752044880 +0800
+@@ -120,6 +120,9 @@
+ %token KEYINFO REALM KEYID SECRET KEYNAME EXPIRE
+ %token ADDRPOOL POOLNAME RANGE TO ADDRESS_POOL
+ %token INCLUDE
++%token AFTR
++%token S46_MAPE
++%token S46_MAPT
+ 
+ %token NUMBER SLASH EOS BCL ECL STRING QSTRING PREFIX INFINITY
+ %token COMMA
+@@ -749,6 +752,30 @@
+ 			/* currently no value */
+ 			$$ = l;
+ 		}
++	|	AFTR
++		{
++			struct cf_list *l;
++
++			MAKE_CFLIST(l, DHCPOPT_AFTR, NULL, NULL);
++			/* currently no value */
++			$$ = l;
++		}
++	|	S46_MAPE
++		{
++			struct cf_list *l;
++
++			MAKE_CFLIST(l, DHCPOPT_S46_MAPE, NULL, NULL);
++			/* currently no value */
++			$$ = l;
++		}
++	|	S46_MAPT
++		{
++			struct cf_list *l;
++
++			MAKE_CFLIST(l, DHCPOPT_S46_MAPT, NULL, NULL);
++			/* currently no value */
++			$$ = l;
++		}
+ 	;
+ 
+ rangeparam:
+diff -urN wide-dhcpv6-20080615-coverity/cftoken.l dhcpv6/cftoken.l
+--- wide-dhcpv6-20080615-coverity/cftoken.l	2022-08-09 18:10:34.398253608 +0800
++++ dhcpv6/cftoken.l	2022-08-09 18:11:57.669492025 +0800
+@@ -104,7 +104,7 @@
+ hexpair		{hexdigit}{hexdigit}
+ hexstring	0[xX]{hexpair}+
+ duid 		{hexpair}(:{hexpair})*
+-ifname		{string}
++ifname		[a-zA-Z]+[0-9]+|[a-zA-Z\_]+[0-9\_]+[0-9]+|[a-zA-Z\.]+[0-9\.]+[0-9]+
+ slash		\/
+ bcl		\{
+ ecl		\}
+@@ -120,6 +120,7 @@
+ %s S_SECRET
+ %s S_ADDRPOOL
+ %s S_INCL
++%option noyywrap
+ 
+ %%
+ %{
+@@ -205,6 +206,9 @@
+ <S_CNF>bcmcs-server-address { DECHO; return (BCMCS_SERVERS); }
+ <S_CNF>bcmcs-server-domain-name { DECHO; return (BCMCS_NAME); }
+ <S_CNF>refreshtime { DECHO; return (REFRESHTIME); }
++<S_CNF>aftr { DECHO; return (AFTR); }
++<S_CNF>mape { DECHO; return (S46_MAPE); }
++<S_CNF>mapt { DECHO; return (S46_MAPT); }
+ 
+ 	/* provided for a backward compatibility to WIDE-DHCPv6 before Oct 1 2006 */
+ <S_CNF>nis-server-domain-name { DECHO; return (NIS_NAME); }
+diff -urN wide-dhcpv6-20080615-coverity/common.c dhcpv6/common.c
+--- wide-dhcpv6-20080615-coverity/common.c	2022-08-11 17:19:44.531061636 +0800
++++ dhcpv6/common.c	2022-08-11 17:17:14.968598643 +0800
+@@ -86,6 +86,173 @@
+ #include <common.h>
+ #include <timer.h>
+ 
++/* brcm start */
++#include "cms_msg.h"
++#include "dhcp_config_key.h"
++
++Dhcp6cStateChangedMsgBody dhcp6cMsgBody;
++char brcm_ifname[32];
++
++#define MAX_DHCP_OPTION_LEN      384 /* just for current brcm extended case */
++#define DHCP_OPTION_CODE_OFFSET   0
++#define DHCP_OPTION_LEN_OFFSET    2
++#define DHCP_OPTION_DATA_OFFSET   4  /* also means the header(code+len) size  */
++
++#define BRCM_UDHCP6C_CONFIG_DIR       "/var/udhcp6c"
++#define BRCM_UDHCPC_CONFIG_FILE_BASE_NAME "option"
++#define BRCM_UDHCPC_CONFIG_IN_FILE_SUFFIX ".in"
++#define BRCM_UDHCPC_CONFIG_OUT_FILE_SUFFIX ".out"
++#define BRCM_UDHCPC_CONFIG_FILE_NAME_LEN 64
++#define BRCM_DUID_FILE_NAME_LEN 64
++
++#define VENDOR_INFO_STR_PKTC2_0  "pktc2.0"
++#define ENTERPRISE_ID_CTLAB  4491 /* enterprise_id: Cable Television Laboratories, Inc. */
++
++//brcm, for CE Router test
++#define notyet 1
++
++char is_pktcbl = FALSE; /* is Packet Cable supported */
++u_int16_t opt_rep_list[DH6OPT_EXTEND_MAX_NUM]; /* options map to report */
++u_int16_t opt_rep_num = 0;  /* invalid report code number */
++char is_opt_rep_list_used = FALSE;
++u_int16_t opt_req_list[DH6OPT_EXTEND_MAX_NUM]; /* options map to request */
++u_int16_t opt_req_num = 0;  /* invalid request code number */
++char is_opt_req_list_used = FALSE;
++
++static int findEncapVendorSpecificOption(const char *option, int len,
++                                  u_int16_t sub_option_num,
++                                  int *sub_option_offset, int *sub_option_len);
++static void sendAddrEventMessage __P((ifaddrconf_cmd_t, const char *, const char *, int, int));
++
++char is_option_in_list(u_int16_t *list_p, u_int16_t len, u_int16_t option) {
++	int i;
++
++	for (i = 0; i < len; i++) {
++		if (option == list_p[i]) {
++			return TRUE;
++		}
++	}
++	return FALSE;
++}
++
++/* For debug */
++static void ShowOption(const char *option, int len)
++{
++	int i;
++
++	for (i = 0; i < len; i++) {
++		printf("%02x ", option[i]);
++		if ((i + 1) % 16 == 0) {
++			printf("\n");
++		}
++	}
++	printf("\n\n");
++}
++
++/* Read OptionX from optionX file */
++static int ReadOptionX(int code, char *buff, int *len)
++{
++	char file[BRCM_UDHCPC_CONFIG_FILE_NAME_LEN] = {0};
++	FILE *in;
++	int ret = 0, rlen, vlen = 0;
++	u_int16_t *lenPtr = NULL;
++
++	/* Full name example: /var/udhcp6c/veip0.1/option17.in */
++	snprintf(file, sizeof(file), "%s/%s/%s%d%s", 
++					BRCM_UDHCP6C_CONFIG_DIR, brcm_ifname, 
++					BRCM_UDHCPC_CONFIG_FILE_BASE_NAME, code,
++					BRCM_UDHCPC_CONFIG_IN_FILE_SUFFIX);
++	if (!(in = fopen(file, "r"))) {
++		dprintf(LOG_ERR, FNAME, "unable to open option file: %s", file);
++		return -1;
++	}
++
++	rlen = fread(buff, 1, *len, in);
++
++	/* decrypt */
++	dhcpEncryptCfgFile(buff, rlen, BRCM_DHCP_CONFIG_KEY);
++
++	/* verify */
++	lenPtr = (u_int16_t *)&buff[DHCP_OPTION_LEN_OFFSET];
++	vlen = ntohs(*(lenPtr)) + DHCP_OPTION_DATA_OFFSET;
++	if (rlen != vlen) {
++		dprintf(LOG_ERR, FNAME, "Invalid option file: %s", file);
++		ret = -1;
++		goto exit;
++	}
++
++	if(foreground && LOG_DEBUG == debug_thresh) {
++		dprintf(LOG_DEBUG, FNAME, "Option%d:\n", code);
++		ShowOption(buff, rlen);
++	}
++
++	*len = rlen;
++
++exit:
++	fclose(in);
++	return ret;
++}
++
++
++/* Create OptionX */
++static int CreateOptionX(int code, char *buff, u_int16_t bufflen)
++{
++	int len = bufflen; /* INOUT */
++	return ReadOptionX(code, buff, &len);
++}
++
++
++/* Save OptionX to optionX file */
++int SaveOptionX(int code, const char *option, int len)
++{
++	char file[BRCM_UDHCPC_CONFIG_FILE_NAME_LEN] = {0};
++	char *buff = NULL;
++	FILE *out = NULL;
++	int ret = 0;
++	unsigned cnt = 1;
++	int wlen = len < MAX_DHCP_OPTION_LEN ? len : MAX_DHCP_OPTION_LEN;
++
++	if(foreground && LOG_DEBUG == debug_thresh) {
++		dprintf(LOG_DEBUG, FNAME, "Option%d:\n", code);
++		ShowOption(option, wlen);
++	}
++
++	if ((buff = malloc(wlen)) == NULL) {
++		dprintf(LOG_ERR, FNAME, "memory allocation failed");
++		return -1;
++	}
++
++	memset(buff, 0, wlen);
++
++	/* encrypt */
++	memcpy(buff, option, wlen);
++	dhcpEncryptCfgFile(buff, wlen, BRCM_DHCP_CONFIG_KEY);
++
++	/* Full name example: var/udhcp6c/veip0.1/option17.out */
++	snprintf(file, sizeof(file), "%s/%s/%s%d%s", BRCM_UDHCP6C_CONFIG_DIR, brcm_ifname, 
++	            BRCM_UDHCPC_CONFIG_FILE_BASE_NAME, code,
++	            BRCM_UDHCPC_CONFIG_OUT_FILE_SUFFIX);
++	if (!(out = fopen(file, "w"))) {
++		dprintf(LOG_ERR, FNAME, "unable to open option file: %s", file);
++		ret = -1;
++		goto exit;
++	}
++
++	if (fwrite(buff, wlen, cnt, out) != cnt) {
++		dprintf(LOG_ERR, FNAME, "write option file: %s fail", file);
++		ret = -1;
++		goto exit;
++	}
++
++	exit:
++	if (out)
++		fclose(out);
++	if (buff)
++		free(buff);
++	return ret;
++}
++/* brcm end */
++
+ #ifdef __linux__
+ /* from /usr/include/linux/ipv6.h */
+ 
+@@ -625,6 +792,31 @@
+ 	return (dst);
+ }
+ 
++//brcm start
++static int
++dhcp6_get_map(optlen, cp, type, list)
++	int optlen;
++	void *cp;
++	dhcp6_listval_type_t type;
++	struct dhcp6_list *list;
++{
++	struct dhcp6_vbuf vb;
++
++	vb.dv_len = optlen;
++	vb.dv_buf = cp;
++
++	if (dhcp6_add_listval(list,
++	    DHCP6_LISTVAL_VBUF, &vb, NULL) == NULL) {
++		dprintf(LOG_ERR, FNAME, "failed to copy map%c %s",
++		    type == DH6OPT_S46_CONT_MAPT ? 't' : (type == DH6OPT_S46_CONT_MAPE ? 'e' : '?'),
++		    dhcp6optstr(type));
++		return -1;
++	}
++
++	return 0;
++}
++//brcm end
++
+ /*
+  * Home-brew function of a 64-bit version of ntohl.
+  * XXX: is there any standard for this?
+@@ -913,7 +1105,8 @@
+ #ifdef HAVE_SA_LEN
+ 	sa6.sin6_len = sizeof(sa6);
+ #endif
+-	sa6.sin6_addr = *in6;
++	/* brcm: *in6 is not guaranteed aligned, so we need memcpy */
++	memcpy(&sa6.sin6_addr, in6, sizeof(struct in6_addr));
+ 	sa6.sin6_scope_id = scopeid;
+ 
+ 	return (addr2str((struct sockaddr *)&sa6));
+@@ -990,19 +1183,33 @@
+ }
+ 
+ int
+-get_duid(idfile, duid)
++get_duid(idfile, duid, brcm_ifname)
+ 	char *idfile;
+ 	struct duid *duid;
++	char *brcm_ifname;
+ {
+ 	FILE *fp = NULL;
+ 	u_int16_t len = 0, hwtype;
+ 	struct dhcp6opt_duid_type1 *dp; /* we only support the type1 DUID */
+ 	char tmpbuf[256];	/* DUID should be no more than 256 bytes */
+-	int l = gethwid(tmpbuf, sizeof(tmpbuf), NULL, &hwtype);
++	int l = gethwid(tmpbuf, sizeof(tmpbuf), brcm_ifname, &hwtype);
++	char file_name[BRCM_DUID_FILE_NAME_LEN] = {0};
++
++	// duid files need to have different name with different client.
++	// Or override would happen when 2 clients exist. 
++	// So need to add suffix for duid file name. 
++	if (brcm_ifname[0] != '\0')
++	{
++		if ((strlen(brcm_ifname) + strlen(idfile) + 1) < BRCM_DUID_FILE_NAME_LEN)
++			sprintf(file_name, "%s%s%s", idfile, "_", brcm_ifname);
++	}
++
++	if (file_name[0] == '\0')
++		sprintf(file_name, "%s", idfile);    
+ 
+-	if ((fp = fopen(idfile, "r")) == NULL && errno != ENOENT)
++	if ((fp = fopen(file_name, "r")) == NULL && errno != ENOENT)
+ 		dprintf(LOG_NOTICE, FNAME, "failed to open DUID file: %s",
+-		    idfile);
++		    file_name);
+ 
+ 	if (fp) {
+ 		/* decode length */
+@@ -1042,16 +1249,18 @@
+ 
+ 		dprintf(LOG_DEBUG, FNAME,
+ 		    "extracted an existing DUID from %s: %s",
+-		    idfile, duidstr(duid));
++		    file_name, duidstr(duid));
+ 	} else {
+ 		u_int64_t t64;
+ 
+ 		dp = (struct dhcp6opt_duid_type1 *)duid->duid_id;
+-		dp->dh6_duid1_type = htons(1); /* type 1 */
++		dp->dh6_duid1_type = htons(3); /* brcm: was type 1 (DUID-LLT). Change to type 3 (DUID-LL). */
+ 		dp->dh6_duid1_hwtype = htons(hwtype);
++#if 0 //brcm: change to type 3 (DUID-LL)
+ 		/* time is Jan 1, 2000 (UTC), modulo 2^32 */
+ 		t64 = (u_int64_t)(time(NULL) - 946684800);
+ 		dp->dh6_duid1_time = htonl((u_long)(t64 & 0xffffffff));
++#endif
+ 		memcpy((void *)(dp + 1), tmpbuf, (len - sizeof(*dp)));
+ 
+ 		dprintf(LOG_DEBUG, FNAME, "generated a new DUID: %s",
+@@ -1060,7 +1269,7 @@
+ 
+ 	/* save the (new) ID to the file for next time */
+ 	if (!fp) {
+-		if ((fp = fopen(idfile, "w+")) == NULL) {
++		if ((fp = fopen(file_name, "w+")) == NULL) {
+ 			dprintf(LOG_ERR, FNAME,
+ 			    "failed to open DUID file for save");
+ 			goto fail;
+@@ -1075,7 +1284,7 @@
+ 		}
+ 
+ 		dprintf(LOG_DEBUG, FNAME, "saved generated DUID to %s",
+-		    idfile);
++		    file_name);
+ 	}
+ 
+ 	if (fp)
+@@ -1343,6 +1552,9 @@
+ 	TAILQ_INIT(&optinfo->nispname_list);
+ 	TAILQ_INIT(&optinfo->bcmcs_list);
+ 	TAILQ_INIT(&optinfo->bcmcsname_list);
++	TAILQ_INIT(&optinfo->aftr_list);
++	TAILQ_INIT(&optinfo->map_list);
++	TAILQ_INIT(&optinfo->unicast_list);
+ 
+ 	optinfo->authproto = DHCP6_AUTHPROTO_UNDEF;
+ 	optinfo->authalgorithm = DHCP6_AUTHALG_UNDEF;
+@@ -1380,7 +1592,10 @@
+ 	dhcp6_clear_list(&optinfo->nispname_list);
+ 	dhcp6_clear_list(&optinfo->bcmcs_list);
+ 	dhcp6_clear_list(&optinfo->bcmcsname_list);
+-
++	dhcp6_clear_list(&optinfo->aftr_list);
++	dhcp6_clear_list(&optinfo->map_list);
++	dhcp6_clear_list(&optinfo->unicast_list);
++	
+ 	if (optinfo->relaymsg_msg != NULL)
+ 		free(optinfo->relaymsg_msg);
+ 
+@@ -1432,6 +1647,12 @@
+ 		goto fail;
+ 	if (dhcp6_copy_list(&dst->bcmcsname_list, &src->bcmcsname_list))
+ 		goto fail;
++	if (dhcp6_copy_list(&dst->aftr_list, &src->aftr_list))
++		goto fail;
++	if (dhcp6_copy_list(&dst->map_list, &src->map_list))
++		goto fail;
++	if (dhcp6_copy_list(&dst->unicast_list, &src->unicast_list))
++		goto fail;
+ 	dst->elapsed_time = src->elapsed_time;
+ 	dst->refreshtime = src->refreshtime;
+ 	dst->pref = src->pref;
+@@ -1504,6 +1725,44 @@
+ 	struct dhcp6_list sublist;
+ 	int authinfolen;
+ 
++#if 0    //brcm: option 15 and 16 test
++   struct dhcp6opt_ucls {
++      struct dhcp6opt   hdr;
++      u_int16_t         clslen1;
++      char              clsdata1[16];
++      u_int16_t         clslen2;
++      char              clsdata2[12];
++   } *ucls;
++
++   struct dhcp6opt_vcls {
++      struct dhcp6opt   hdr;
++      u_int32_t         enterprisenum;
++      u_int16_t         clslen1;
++      char              clsdata1[12];
++      u_int16_t         clslen2;
++      char              clsdata2[16];
++   } *vcls;
++
++   ucls = (struct dhcp6opt_ucls *)ep;
++   ucls->hdr.dh6opt_type = DH6OPT_USER_CLASS;
++   ucls->hdr.dh6opt_len  = 32;
++   ucls->clslen1         = 16;
++   strcpy(ucls->clsdata1, "abcdefghijklmnop");
++   ucls->clslen2         = 12;
++   strcpy(ucls->clsdata2, "ABCDEFGHIJKL");
++   (struct dhcp6opt_ucls *)ep += 1;
++   
++   vcls = (struct dhcp6opt_vcls *)ep;
++   vcls->hdr.dh6opt_type = DH6OPT_VENDOR_CLASS;
++   vcls->hdr.dh6opt_len  = 36;
++   vcls->enterprisenum   = 6614;
++   vcls->clslen1         = 12;
++   strcpy(vcls->clsdata1, "abcdefghijkl");
++   vcls->clslen2         = 16;
++   strcpy(vcls->clsdata2, "ABCDEFGHIJKLMNOP");
++   (struct dhcp6opt_vcls *)ep += 1;
++#endif
++
+ 	bp = (char *)p;
+ 	for (; p + 1 <= ep; p = np) {
+ 		struct duid duid0;
+@@ -1702,6 +1961,21 @@
+ 				break;
+ #ifdef notyet
+ 			case DHCP6_AUTHPROTO_RECONFIG:
++				if (authinfolen == 0) {
++					optinfo->authflags |=
++					    DHCP6OPT_AUTHFLAG_NOINFO;
++					break;
++				}
++				
++				optinfo->reconfigauth_type = *cp++;
++				optinfo->reconfigauth_offset  = cp - bp;
++				memcpy(optinfo->reconfigauth_val, cp, 16);
++				cp += 16;
++				
++				dprintf(LOG_DEBUG, "", " auth type: %d, offset=%d",
++				    optinfo->reconfigauth_type,
++				    optinfo->reconfigauth_offset);
++
+ 				break;
+ #endif
+ 			default:
+@@ -1879,6 +2153,211 @@
+ 			dhcp6_clear_list(&sublist);
+ 
+ 			break;
++//brcm- start
++		case DH6OPT_USER_CLASS:
++      {
++         char *instance, *instanceNext;
++         char csav;
++
++         dprintf(LOG_DEBUG, FNAME, "DHCP6 received User Class Option (15):\n");
++         for (instance = cp; instance < (char *)np; instance = instanceNext) {
++            instanceNext = instance + 2 + *(u_int16_t *)instance;
++            if (instanceNext <= (char *)np) {
++               /* save the first char of the next instance data */
++               csav = *instanceNext;
++               /* replace it with a NULL */
++               *instanceNext = '\0';
++               printf("    user class data: %s\n", instance+2);
++               /* restore the original char */
++               *instanceNext = csav;
++            }
++         }
++         break;
++      }
++		case DH6OPT_VENDOR_CLASS:
++      {
++         char *instance, *instanceNext;
++         char csav;
++
++         dprintf(LOG_DEBUG, FNAME, "DHCP6 received Vendor Class Option (16):\n");
++         dprintf(LOG_DEBUG, FNAME, "    enterprise-number: %d\n", *(u_int32_t *)cp);
++         for (instance = cp+4; instance < (char *)np; instance = instanceNext) {
++            instanceNext = instance + 2 + *(u_int16_t *)instance;
++            if (instanceNext <= (char *)np) {
++               /* save the first char of the next instance data */
++               csav = *instanceNext;
++               /* replace it with a NULL */
++               *instanceNext = '\0';
++               dprintf(LOG_DEBUG, FNAME, "    vendor class data: %s\n", instance+2);
++               /* restore the original char */
++               *instanceNext = csav;
++            }
++         }
++         break;
++      }
++      // brcm: get ACS URL from dhcp server option 17
++      case DH6OPT_VENDOR_OPTS:
++      {
++          char *option_string;
++          int option_len;
++          u_int32_t enterprise_id;
++          u_int16_t sub_option_num=1;
++          int sub_option_offset=0;
++          int sub_option_len=0;
++
++          /* No guarentee on alignment, so copy to word variable */
++          memcpy(&enterprise_id, cp, sizeof(enterprise_id));
++          enterprise_id = ntohl(enterprise_id);
++
++          /* Skip other enterprise_id */
++          if (ENTERPRISE_ID_CTLAB == enterprise_id) {
++             break;
++          }
++
++          // the first word in the data is the enterprise number.
++          // I cannot find an Enterprise number for Broadband Forum in the
++          // IANA database, so don't check for now.  See page 85 of RFC 3315.
++          dprintf(LOG_DEBUG, FNAME, "    enterprise-number: %d (0x%x)\n",
++                  enterprise_id, enterprise_id);
++
++          // advance to point to the real data
++          option_string = cp + 4;
++          option_len = optlen - 4;
++
++          // look for sub option 1: ManagementServer.URL
++          if (findEncapVendorSpecificOption(option_string, option_len,
++                 sub_option_num, &sub_option_offset, &sub_option_len))
++          {
++             int copyLen = sizeof(optinfo->acsURL) - 1;
++             if (copyLen > sub_option_len) copyLen=sub_option_len;
++
++             memcpy(optinfo->acsURL, &option_string[sub_option_offset], copyLen);
++             optinfo->acsURL[copyLen] = '\0';
++             // fprintf(stderr, "Found acsURL %s!!\n", optinfo->acsURL);
++          }
++
++          // look for sub option 2: DeviceInfo.ProvisioningCode
++          sub_option_num = 2;
++          sub_option_offset = 0;
++          sub_option_len = 0;
++          if (findEncapVendorSpecificOption(option_string, option_len,
++                           sub_option_num, &sub_option_offset, &sub_option_len))
++          {
++             int copyLen = sizeof(optinfo->acsProvisioningCode) - 1;
++             if (copyLen > sub_option_len) copyLen = sub_option_len;
++
++            memcpy(optinfo->acsProvisioningCode, &option_string[sub_option_offset], copyLen);
++            optinfo->acsProvisioningCode[copyLen] = '\0';
++            // fprintf(stderr, "Found ProvisioningCode %s!!\n", optinfo->acsProvisioningCode);
++         }
++
++         // look for sub option 3: ManagementServer.CWMPRetryMinimumWaitInterval
++         sub_option_num = 3;
++         sub_option_offset = 0;
++         sub_option_len = 0;
++         if (findEncapVendorSpecificOption(option_string, option_len,
++                         sub_option_num, &sub_option_offset, &sub_option_len))
++         {
++             char numBuf[20]={0};
++             int copyLen = sizeof(numBuf) - 1;
++             if (copyLen > sub_option_len) copyLen = sub_option_len;
++
++             memcpy(numBuf, &option_string[sub_option_offset], copyLen);
++             optinfo->cwmpRetryMinimumWaitInterval = strtoul(numBuf, NULL, 0);
++             // fprintf(stderr, "Found minWaitInterval %s/%d!!\n", numBuf, optinfo->cwmpRetryMinimumWaitInterval);
++          }
++
++         // look for sub option 4: ManagementServer.CWMPRetryIntervalMultiplier
++         sub_option_num = 4;
++         sub_option_offset = 0;
++         sub_option_len = 0;
++         if (findEncapVendorSpecificOption(option_string, option_len,
++                          sub_option_num, &sub_option_offset, &sub_option_len))
++         {
++            char numBuf[20]={0};
++            int copyLen = sizeof(numBuf) - 1;
++            if (copyLen > sub_option_len) copyLen = sub_option_len;
++
++            memcpy(numBuf, &option_string[sub_option_offset], copyLen);
++            optinfo->cwmpRetryIntervalMultiplier = strtoul(numBuf, NULL, 0);
++            // fprintf(stderr, "Found IntervalMultiplier %s/%d!!\n", numBuf, optinfo->cwmpRetryIntervalMultiplier);
++          }
++
++          break;
++      }
++      case DH6OPT_AFTR_NAME:
++      {
++          if (dhcp6_get_domain(optlen, cp, opt, &optinfo->aftr_list) == -1)
++          {
++             goto fail;
++          }
++
++          break;
++      }
++      case DH6OPT_S46_CONT_MAPE:
++      case DH6OPT_S46_CONT_MAPT:
++      {
++          if (dhcp6_get_map(optlen, cp, opt, &optinfo->map_list) == -1)
++          {
++             goto fail;
++          }
++
++          break;
++      }
++      case DH6OPT_UNICAST:
++      {
++          if (dhcp6_get_addr(optlen, cp, opt, &optinfo->unicast_list) == -1)
++          {
++             goto fail;
++          }
++
++          break;
++      }
++      case DH6OPT_SOL_MAX_RT:
++      {
++          if (optlen != 4)
++             goto malformed;
++          memcpy(&val32, cp, sizeof(val32));
++          val32 = ntohl(val32);
++          dprintf(LOG_DEBUG, "", "   solicit timeout: %d", val32);
++          if (optinfo->maxSolTimeo != 0)
++          {
++             dprintf(LOG_INFO, FNAME, "duplicated solicit timeout option");
++          }
++          else if (val32 < DHCP6_SOL_RT_MINIMUM || val32 > DHCP6_SOL_RT_MAXIMUM)
++          {
++             dprintf(LOG_INFO, FNAME, "solicit timeout value is invalid (%d), ignored", val32);
++          }
++          else if (val32 != SOL_MAX_RT)
++          {
++             optinfo->maxSolTimeo = val32 * 1000;
++          }
++
++          break;
++      }
++      case DH6OPT_INF_MAX_RT:
++      {
++          if (optlen != 4)
++             goto malformed;
++          memcpy(&val32, cp, sizeof(val32));
++          val32 = ntohl(val32);
++          dprintf(LOG_DEBUG, "", "   info request timeout: %d", val32);
++          if (optinfo->maxInfTimeo != 0)
++          {
++             dprintf(LOG_INFO, FNAME, "duplicated info request timeout option");
++          }
++          else if (val32 < DHCP6_INF_RT_MINIMUM || val32 > DHCP6_INF_RT_MAXIMUM)
++          {
++             dprintf(LOG_INFO, FNAME, "info request timeout value is invalid (%d), ignored", val32);
++          }
++          else if (val32 != INF_MAX_RT)
++          {
++             optinfo->maxInfTimeo = val32 * 1000;
++          }
++
++          break;
++      }
++//brcm- end
+ 		default:
+ 			/* no option specific behavior */
+ 			dprintf(LOG_INFO, FNAME,
+@@ -1886,6 +2365,23 @@
+ 			    dhcp6optstr(opt), optlen);
+ 			break;
+ 		}
++
++// brcm-begin
++		if (is_opt_req_list_used) {
++			if (is_option_in_list(opt_req_list, opt_req_num, opt)) {
++				if (DH6OPT_VENDOR_OPTS == opt) {
++					u_int32_t enterprise_id;
++					
++					memcpy(&enterprise_id, cp, sizeof(enterprise_id));
++					enterprise_id = ntohl(enterprise_id);
++					if (ENTERPRISE_ID_CTLAB != enterprise_id) {
++						continue;
++					}
++				}
++				SaveOptionX(opt, (char *)p, optlen + DHCP_OPTION_DATA_OFFSET);
++			}
++		}
++// brcm- end
+ 	}
+ 
+ 	return (0);
+@@ -2308,6 +2804,15 @@
+ 		}
+ 	}
+ 
++// brcm - begin
++	if (optinfo->reconfaccept) {
++		if (copy_option(DH6OPT_RECONF_ACCEPT, 0, NULL, &p,
++		    optep, &len) != 0) {
++			goto fail;
++		}
++	}
++// brcm - end
++
+ 	if (optinfo->pref != DH6OPT_PREF_UNDEF) {
+ 		u_int8_t p8 = (u_int8_t)optinfo->pref;
+ 
+@@ -2346,6 +2851,14 @@
+ 		tmpbuf = NULL;
+ 		buflen = dhcp6_count_list(&optinfo->reqopt_list) *
+ 			sizeof(u_int16_t);
++
++// brcm-begin
++        /* count extend reqopt number */
++		if (is_opt_req_list_used) {
++			buflen += (opt_req_num * sizeof(u_int16_t));
++		}
++// brcm-end
++
+ 		if ((tmpbuf = malloc(buflen)) == NULL) {
+ 			dprintf(LOG_ERR, FNAME,
+ 			    "memory allocation failed for options");
+@@ -2371,6 +2884,24 @@
+ 			valp++;
+ 			optlen += sizeof(u_int16_t);
+ 		}
++
++// brcm-begin
++		if (is_opt_req_list_used) {
++			int i;
++			u_int16_t code;
++
++			for (i = 0; i < opt_req_num; i++) {
++				code = opt_req_list[i];
++				if (0 != code && 
++					!is_option_in_list((u_int16_t *)tmpbuf, optlen/sizeof(u_int16_t), htons(code))){
++					*valp = htons(code);
++					valp++;
++					optlen += sizeof(u_int16_t);
++				}
++			}
++		}
++// brcm-end
++
+ 		if (optlen > 0 &&
+ 		    copy_option(DH6OPT_ORO, optlen, tmpbuf, &p,
+ 		    optep, &len) != 0) {
+@@ -2380,6 +2911,61 @@
+ 		tmpbuf = NULL;
+ 	}
+ 
++// brcm-begin
++// set dslforum.org vendor option
++	if (is_pktcbl)
++	{
++		struct vendor_class_data vcd;
++		u_int16_t info1_len = sizeof(vcd.info1_string);
++		vcd.enterprise_number=htonl(ENTERPRISE_ID_CTLAB);  //Cable Television Laboratories, Inc. 
++		vcd.info1_len = htons(info1_len);
++		memset(vcd.info1_string, 0, info1_len);
++		memcpy(vcd.info1_string, VENDOR_INFO_STR_PKTC2_0, strlen(VENDOR_INFO_STR_PKTC2_0));
++		(void)copy_option(DH6OPT_VENDOR_CLASS, sizeof(vcd),
++		            (char *)&vcd, &p, optep, &len);
++	}
++	else
++	{
++		struct vendor_class_data vcd;
++		u_int16_t info1_len = sizeof(vcd.info1_string);
++		vcd.enterprise_number=htonl(3561);  //ADSL Forum, Greg Bathrick
++		vcd.info1_len = htons(info1_len);
++		memset(vcd.info1_string, 0, info1_len);
++		memcpy(vcd.info1_string, "dslforum.org", info1_len);
++		(void)copy_option(DH6OPT_VENDOR_CLASS, sizeof(vcd),
++		            (char *)&vcd, &p, optep, &len);
++	}
++
++	if (is_opt_rep_list_used) {
++		int i;
++		u_int16_t code, datalen = 0;
++
++		tmpbuf = NULL;
++		if ((tmpbuf = malloc(MAX_DHCP_OPTION_LEN)) == NULL) {
++			dprintf(LOG_ERR, FNAME,
++			    "memory allocation failed for extend options");
++		}
++		else {
++			for (i = 0; i < opt_rep_num; i++) {
++				code = opt_rep_list[i];
++				if (0 != code) {
++					memset(tmpbuf, 0, sizeof(MAX_DHCP_OPTION_LEN));
++					if (CreateOptionX(code, tmpbuf, MAX_DHCP_OPTION_LEN) == 0) {
++						(void)copy_option(code, 
++							ntohs(*((u_int16_t *)(tmpbuf + DHCP_OPTION_LEN_OFFSET))),
++							tmpbuf + DHCP_OPTION_DATA_OFFSET, &p, optep, &len);
++					}
++				}
++			}
++		}
++
++		if (tmpbuf) {
++			free(tmpbuf);
++			tmpbuf = NULL;
++		}
++	}
++// brcm-end
++
+ 	if (dhcp6_set_domain(DH6OPT_SIP_SERVER_D, &optinfo->sipname_list,
+ 	    &p, optep, &len) != 0)
+ 		goto fail;
+@@ -2796,11 +3382,11 @@
+ 	switch(ev->state) {
+ 	case DHCP6S_SOLICIT:
+ 		ev->init_retrans = SOL_TIMEOUT;
+-		ev->max_retrans_time = SOL_MAX_RT;
++		ev->max_retrans_time = !ev->ifp->maxSolTimeo ? SOL_MAX_RT : ev->ifp->maxSolTimeo;
+ 		break;
+ 	case DHCP6S_INFOREQ:
+ 		ev->init_retrans = INF_TIMEOUT;
+-		ev->max_retrans_time = INF_MAX_RT;
++		ev->max_retrans_time = !ev->ifp->maxInfTimeo ? INF_MAX_RT : ev->ifp->maxInfTimeo;
+ 		break;
+ 	case DHCP6S_REQUEST:
+ 		ev->init_retrans = REQ_TIMEOUT;
+@@ -2884,6 +3470,8 @@
+ 	dprintf(LOG_DEBUG, FNAME, "reset a timer on %s, "
+ 		"state=%s, timeo=%d, retrans=%d",
+ 		ev->ifp->ifname, statestr, ev->timeouts, ev->retrans);
++	dprintf(LOG_DEBUG, "",
++		"   max_retrans_time=%d", ev->max_retrans_time);
+ }
+ 
+ int
+@@ -3027,6 +3615,8 @@
+ 		return ("interface ID");
+ 	case DH6OPT_RECONF_MSG:
+ 		return ("reconfigure message");
++	case DH6OPT_RECONF_ACCEPT:
++		return ("reconf accept");
+ 	case DH6OPT_SIP_SERVER_D:
+ 		return ("SIP domain name");
+ 	case DH6OPT_SIP_SERVER_A:
+@@ -3063,6 +3653,10 @@
+ 		return ("subscriber ID");
+ 	case DH6OPT_CLIENT_FQDN:
+ 		return ("client FQDN");
++	case DH6OPT_SOL_MAX_RT:
++		return ("SOL_MAX_RT");
++	case DH6OPT_INF_MAX_RT:
++		return ("INF_MAX_RT");
+ 	default:
+ 		snprintf(genstr, sizeof(genstr), "opt_%d", type);
+ 		return (genstr);
+@@ -3218,7 +3812,7 @@
+ }
+ 
+ void
+-dprintf(int level, const char *fname, const char *fmt, ...)
++my_dprintf(int level, const char *fname, const char *fmt, ...)
+ {
+ 	va_list ap;
+ 	char logbuf[LINE_MAX];
+@@ -3230,6 +3824,7 @@
+ 	if (*fname == '\0')
+ 		printfname = 0;
+ 
++//brcm: for verbose debugging, use if (1) here
+ 	if (foreground && debug_thresh >= level) {
+ 		time_t now;
+ 		struct tm *tm_now;
+@@ -3253,6 +3848,100 @@
+ 	va_end(ap);
+ }
+ 
++/* brcm start */
++int findEncapVendorSpecificOption(const char *option, int len,
++                                  u_int16_t sub_option_num,
++                                  int *sub_option_offset, int *sub_option_len)
++{
++   struct dhcp6opt hdr;
++   int i=0;
++   u_int16_t curr_sub_option_num;
++   int curr_sub_option_len;
++
++   while (i < len)
++   {
++      /* no guarantee on alignment, so copy header */
++      memcpy(&hdr, &option[i], sizeof(hdr));
++      curr_sub_option_num = ntohs(hdr.dh6opt_type);
++      curr_sub_option_len = ntohs(hdr.dh6opt_len);
++
++      /* sanity check */
++      if (i + 4 + curr_sub_option_len > len)
++      {
++         printf("sub-option exceeds len, %d %d %d",
++                 i, curr_sub_option_len, len);
++         return 0;
++      }
++
++      if (sub_option_num == curr_sub_option_num)
++      {
++         *sub_option_offset = i+4;
++         *sub_option_len = curr_sub_option_len;
++         return 1;
++      }
++
++      i += 4 + curr_sub_option_len;  /* advance i to the next sub-option */
++   }
++
++   return 0;
++}
++
++int
++ifaddrconf(cmd, ifname, addr, plen, pltime, vltime)
++	ifaddrconf_cmd_t cmd;
++	char *ifname;
++	struct sockaddr_in6 *addr;
++	int plen;
++	int pltime;
++	int vltime;
++{
++	char extAddr[BUFLEN_48];
++	char *cmdstr;
++
++	switch(cmd) {
++	case IFADDRCONF_ADD:
++		cmdstr = "add";
++		break;
++	case IFADDRCONF_REMOVE:
++		cmdstr = "remove";
++		break;
++	default:
++		return (-1);
++	}
++
++	dprintf(LOG_DEBUG, FNAME, "%s an address %s/%d on %s", cmdstr,
++		addr2str((struct sockaddr *)addr), plen, ifname);
++
++	snprintf(extAddr, sizeof(extAddr), "%s/%d", addr2str((struct sockaddr *)addr), plen);
++	sendAddrEventMessage(cmd, ifname, extAddr, pltime, vltime);
++
++	return 0;
++}
++
++void sendAddrEventMessage(ifaddrconf_cmd_t cmd, const char *ifname, const char *addr, int pltime, int vltime)
++{
++	/* TODO: Currently, we always assume br0 as the  PD interface */
++	if ( strncmp(ifname, "br", 2) == 0 )  /* address of the PD interface */
++	{
++		snprintf(dhcp6cMsgBody.pdIfAddress, sizeof(dhcp6cMsgBody.pdIfAddress), "%s", addr);
++	}
++	else  /* address of the WAN interface */
++	{
++		dhcp6cMsgBody.addrAssigned = TRUE;
++		dhcp6cMsgBody.addrCmd      = cmd;
++		dhcp6cMsgBody.addressPltime = pltime;
++		dhcp6cMsgBody.addressVltime = vltime;
++		snprintf(dhcp6cMsgBody.ifname, sizeof(dhcp6cMsgBody.ifname), "%s", ifname);
++		snprintf(dhcp6cMsgBody.address, sizeof(dhcp6cMsgBody.address), "%s", addr);
++	}
++
++	dprintf(LOG_NOTICE, FNAME, "DHCP6C_ADDR_CHANGED");
++
++	return;
++}  /* End of sendAddrEventMessage() */
++/* brcm end */
++
++#if 0 //brcm: No configuration here. Let CMS do the job
+ int
+ ifaddrconf(cmd, ifname, addr, plen, pltime, vltime)
+ 	ifaddrconf_cmd_t cmd;
+@@ -3360,6 +4049,7 @@
+ 	close(s);
+ 	return (0);
+ }
++#endif //brcm
+ 
+ int
+ safefile(path)
+diff -urN wide-dhcpv6-20080615-coverity/common.h dhcpv6/common.h
+--- wide-dhcpv6-20080615-coverity/common.h	2007-03-21 17:52:57.000000000 +0800
++++ dhcpv6/common.h	2022-08-09 18:11:57.669492025 +0800
+@@ -124,6 +124,10 @@
+ /* search option for dhcp6_find_listval() */
+ #define MATCHLIST_PREFIXLEN 0x1
+ 
++/* brcm start */
++extern void sendDhcp6cEventMessage __P((void));
++/* brcm end */
++
+ /* common.c */
+ typedef enum { IFADDRCONF_ADD, IFADDRCONF_REMOVE } ifaddrconf_cmd_t;
+ extern int dhcp6_copy_list __P((struct dhcp6_list *, struct dhcp6_list *));
+@@ -155,8 +159,7 @@
+ extern int in6_addrscopebyif __P((struct in6_addr *, char *));
+ extern int in6_scope __P((struct in6_addr *));
+ extern void setloglevel __P((int));
+-extern void dprintf __P((int, const char *, const char *, ...));
+-extern int get_duid __P((char *, struct duid *));
++extern int get_duid __P((char *, struct duid *, char *));
+ extern void dhcp6_init_options __P((struct dhcp6_optinfo *));
+ extern void dhcp6_clear_options __P((struct dhcp6_optinfo *));
+ extern int dhcp6_copy_options __P((struct dhcp6_optinfo *,
+diff -urN wide-dhcpv6-20080615-coverity/config.c dhcpv6/config.c
+--- wide-dhcpv6-20080615-coverity/config.c	2022-08-09 18:10:34.398253608 +0800
++++ dhcpv6/config.c	2022-08-09 18:11:57.669492025 +0800
+@@ -1651,6 +1651,9 @@
+ 		case DHCPOPT_NISPNAME:
+ 		case DHCPOPT_BCMCS:
+ 		case DHCPOPT_BCMCSNAME:
++		case DHCPOPT_AFTR:
++		case DHCPOPT_S46_MAPE:
++		case DHCPOPT_S46_MAPT:
+ 		case DHCPOPT_REFRESHTIME:
+ 			switch (cfl->type) {
+ 			case DHCPOPT_SIP:
+@@ -1686,6 +1689,15 @@
+ 			case DHCPOPT_BCMCSNAME:
+ 				opttype = DH6OPT_BCMCS_SERVER_D;
+ 				break;
++			case DHCPOPT_AFTR:
++				opttype = DH6OPT_AFTR_NAME;
++				break;
++			case DHCPOPT_S46_MAPE:
++				opttype = DH6OPT_S46_CONT_MAPE;
++				break;
++			case DHCPOPT_S46_MAPT:
++				opttype = DH6OPT_S46_CONT_MAPT;
++				break;
+ 			case DHCPOPT_REFRESHTIME:
+ 				opttype = DH6OPT_REFRESHTIME;
+ 				break;
+diff -urN wide-dhcpv6-20080615-coverity/config.h dhcpv6/config.h
+--- wide-dhcpv6-20080615-coverity/config.h	2008-06-15 15:48:41.000000000 +0800
++++ dhcpv6/config.h	2022-08-09 18:11:57.669492025 +0800
+@@ -61,7 +61,7 @@
+ 	struct dhcp6_timer *timer;
+ 
+ 	/* event queue */
+-	TAILQ_HEAD(, dhcp6_event) event_list;
++	TAILQ_HEAD(dhcp6_event_list, dhcp6_event) event_list;
+ 
+ 	/* static parameters of the interface */
+ 	char *ifname;
+@@ -83,11 +83,16 @@
+ 	struct dhcp6_list reqopt_list;
+ 	struct ia_conflist iaconf_list;
+ 
++	/* a copy from the current server */
++	u_int32_t maxSolTimeo;
++	u_int32_t maxInfTimeo;
++
+ 	/* authentication information */
+ 	int authproto;		/* protocol */
+ 	/* the followings are valid only if authproto is not UNDEF */
+ 	int authalgorithm;	/* algorithm */
+ 	int authrdm;		/* replay attack detection method */
++	char reconfigkeyval[16]; /*bcm, Reconfigure key value, RFC3315 */
+ };
+ 
+ /* run-time authentication parameters */
+@@ -158,6 +163,9 @@
+ 	struct authparam *authparam; /* authentication parameters */
+ 
+ 	/* TODO: remember available information from the server */
++	struct in6_addr unicastAddr;
++	u_int32_t maxSolTimeo; 	/* up-to-date SOL_MAX_RT value */
++	u_int32_t maxInfTimeo; 	/* up-to-date INF_MAX_RT value */
+ };
+ 
+ /* client status code */
+@@ -274,6 +282,7 @@
+        DHCPOPT_NIS, DHCPOPT_NISNAME, 
+        DHCPOPT_NISP, DHCPOPT_NISPNAME, 
+        DHCPOPT_BCMCS, DHCPOPT_BCMCSNAME, 
++       DHCPOPT_AFTR, DHCPOPT_S46_MAPE, DHCPOPT_S46_MAPT,
+        CFLISTENT_GENERIC,
+        IACONF_PIF, IACONF_PREFIX, IACONF_ADDR,
+        DHCPOPT_SIP, DHCPOPT_SIPNAME,
+diff -urN wide-dhcpv6-20080615-coverity/configure dhcpv6/configure
+--- wide-dhcpv6-20080615-coverity/configure	2008-06-15 15:48:41.000000000 +0800
++++ dhcpv6/configure	2022-08-09 18:11:57.669492025 +0800
+@@ -309,7 +309,7 @@
+ # include <unistd.h>
+ #endif"
+ 
+-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA SET_MAKE CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT CPP YACC LEX LEXLIB LEX_OUTPUT_ROOT EGREP LIBOBJS localdbdir user group LTLIBOBJS'
++ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA SET_MAKE CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT CPP YACC LEX LEXLIB LEX_OUTPUT_ROOT EGREP LIBOBJS localdbdir LTLIBOBJS'
+ ac_subst_files=''
+ 
+ # Initialize some variables set by options.
+@@ -846,8 +846,6 @@
+   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
+   --with-localdbdir=VALUE where to put local DB files
+-  --with-user=USER	set the owner of the programs
+-  --with-group=GROUP	set the group owner of the programs
+ 
+ Some influential environment variables:
+   CC          C compiler command
+@@ -5834,33 +5832,6 @@
+ 
+ fi
+ 
+-echo "$as_me:$LINENO: checking the owner of the programs" >&5
+-echo $ECHO_N "checking the owner of the programs... $ECHO_C" >&6
+-
+-# Check whether --with-user or --without-user was given.
+-if test "${with_user+set}" = set; then
+-  withval="$with_user"
+-  user="$withval"
+-else
+-  user="bin"
+-fi;
+-echo "$as_me:$LINENO: result: $user" >&5
+-echo "${ECHO_T}$user" >&6
+-
+-
+-echo "$as_me:$LINENO: checking the group owner of the programs" >&5
+-echo $ECHO_N "checking the group owner of the programs... $ECHO_C" >&6
+-
+-# Check whether --with-group or --without-group was given.
+-if test "${with_group+set}" = set; then
+-  withval="$with_group"
+-  group="$withval"
+-else
+-  group="bin"
+-fi;
+-echo "$as_me:$LINENO: result: $group" >&5
+-echo "${ECHO_T}$group" >&6
+-
+ 
+ 
+ for ac_header in stdarg.h
+@@ -6668,8 +6639,6 @@
+ s,@EGREP@,$EGREP,;t t
+ s,@LIBOBJS@,$LIBOBJS,;t t
+ s,@localdbdir@,$localdbdir,;t t
+-s,@user@,$user,;t t
+-s,@group@,$group,;t t
+ s,@LTLIBOBJS@,$LTLIBOBJS,;t t
+ CEOF
+ 
+diff -urN wide-dhcpv6-20080615-coverity/debug.h dhcpv6/debug.h
+--- wide-dhcpv6-20080615-coverity/debug.h	1970-01-01 08:00:00.000000000 +0800
++++ dhcpv6/debug.h	2022-08-09 18:11:57.669492025 +0800
+@@ -0,0 +1,20 @@
++#ifndef MY_DEBUG_H_
++#define MY_DEBUG_H_
++
++/* switch to enable/disable debug */
++//#define dbg
++
++#ifdef dbg
++/* First include stdio.h, which may contain the prototype for the external dprintf.
++ * We do not want that. We redefine dprintf to our local implementation. */
++#include <stdio.h>
++#define dprintf my_dprintf
++#ifndef __P
++# define __P(x) x
++#endif
++extern void my_dprintf __P((int, const char *, const char *, ...));
++#else
++#define dprintf(...)
++#endif
++
++#endif /* MY_DEBUG_H_ */
+diff -urN wide-dhcpv6-20080615-coverity/dhcp6c.c dhcpv6/dhcp6c.c
+--- wide-dhcpv6-20080615-coverity/dhcp6c.c	2022-09-26 15:16:05.088029933 +0800
++++ dhcpv6/dhcp6c.c	2022-09-26 15:17:27.827284020 +0800
+@@ -79,6 +79,12 @@
+ #include <prefixconf.h>
+ #include <auth.h>
+ 
++// brcm
++#include "cms_msg.h"
++extern Dhcp6cStateChangedMsgBody dhcp6cMsgBody;
++extern struct dhcp6_prefix cookie;
++void *msgHandle=NULL;
++
+ static int debug = 0;
+ static int exit_ok = 0;
+ static sig_atomic_t sig_flags = 0;
+@@ -128,7 +134,9 @@
+ static int client6_recvadvert __P((struct dhcp6_if *, struct dhcp6 *,
+ 				   ssize_t, struct dhcp6_optinfo *));
+ static int client6_recvreply __P((struct dhcp6_if *, struct dhcp6 *,
+-				  ssize_t, struct dhcp6_optinfo *));
++				  ssize_t, struct dhcp6_optinfo *));	  
++static int client6_recvreconfig __P((struct dhcp6_if *, struct dhcp6 *,
++				  ssize_t, struct dhcp6_optinfo *));	
+ static void client6_signal __P((int));
+ static struct dhcp6_event *find_event_withid __P((struct dhcp6_if *,
+ 						  u_int32_t));
+@@ -146,10 +154,75 @@
+ int client6_start __P((struct dhcp6_if *));
+ static void info_printf __P((const char *, ...));
+ 
++#if 1 //brcm
++int updateDhcp6sConfDnsList __P((struct dhcp6_optinfo *));
++int sendAftrEventMessage __P((struct dhcp6_optinfo *));
++int sendMapEventMessage __P((struct dhcp6_optinfo *));
++static void copyoutNtpList __P((struct dhcp6_optinfo *));
++static void sendDnsEventMessage __P((const char *, const char *));
++static struct in6_addr knownDst;
++char *ifname_info;
++char *brcm_ptr;
++extern char brcm_ifname[32];
++char l2_ifname[32];
++static CmsEntityId requesterId = 0;
++static int is_bdk = FALSE;
++
++#endif
++
+ extern int client6_script __P((char *, int, struct dhcp6_optinfo *));
+ 
+ #define MAX_ELAPSED_TIME 0xffff
+ 
++// brcm-begin
++typedef enum {
++    OPTION_REP = 0, /* reprot */
++    OPTION_REQ      /* request */
++} OPTION_ACT;
++
++extern char is_pktcbl;
++extern u_int16_t opt_rep_list[DH6OPT_EXTEND_MAX_NUM];
++extern u_int16_t opt_rep_num;
++extern char is_opt_rep_list_used;
++extern u_int16_t opt_req_list[DH6OPT_EXTEND_MAX_NUM];
++extern u_int16_t opt_req_num;
++extern char is_opt_req_list_used;
++
++
++/* Example: options list string "17_37_39" means to enable option 17, 37 and 39 */
++static void parse_opt_en_list(char *opt_list, OPTION_ACT act)
++{
++	char *token;
++	int code = 0, i;
++	u_int16_t *list_p = NULL, *cnt;
++
++	if (OPTION_REP == act) {
++		memset(opt_rep_list, 0, sizeof(opt_rep_list));
++		list_p = &opt_rep_list[0];
++		cnt = &opt_rep_num;
++		is_opt_rep_list_used = TRUE;
++	} else if (OPTION_REQ == act) {
++		memset(opt_req_list, 0, sizeof(opt_req_list));
++		list_p = &opt_req_list[0];
++		cnt = &opt_req_num;
++		is_opt_req_list_used = TRUE;
++	} else {
++		return;
++	}
++
++	for (token = strtok(opt_list, "_"); token != NULL; token = strtok(NULL, "_")) {
++		code = strtoul(token, NULL, 10);
++		for (i = 0; i < DH6OPT_EXTEND_MAX_NUM; i++) {
++			if (0 == list_p[i]) { /* empty */
++				list_p[i] = code;
++				(*cnt)++;
++				break;
++			}
++		}
++	}
++}
++// brcm-end
++
+ int
+ main(argc, argv)
+ 	int argc;
+@@ -169,7 +242,7 @@
+ 	else
+ 		progname++;
+ 
+-	while ((ch = getopt(argc, argv, "c:dDfik:p:")) != -1) {
++	while ((ch = getopt(argc, argv, "c:dDfink:p:Q:R:r:P")) != -1) {
+ 		switch (ch) {
+ 		case 'c':
+ 			conffile = optarg;
+@@ -192,6 +265,23 @@
+ 		case 'p':
+ 			pid_file = optarg;
+ 			break;
++// brcm-begin
++		case 'R':
++			parse_opt_en_list(optarg, OPTION_REP);
++			break;
++		case 'Q':
++			parse_opt_en_list(optarg, OPTION_REQ);
++			break;
++		case 'P':
++			is_pktcbl = TRUE;
++			break;
++		case 'r':
++			requesterId = atoi(optarg);
++			break;
++		case 'n':
++			is_bdk = TRUE;
++			break;
++// brcm-end
+ 		default:
+ 			usage();
+ 			exit(0);
+@@ -210,11 +300,29 @@
+ 
+ 	setloglevel(debug);
+ 
++	//brcm
++	memset(&dhcp6cMsgBody, 0, sizeof(Dhcp6cStateChangedMsgBody));
++	memset(&knownDst, 0, sizeof(knownDst));
++	memset(&cookie, 0, sizeof(cookie));
++	ifname_info = argv[0];
++
++	cmsUtl_strncpy(brcm_ifname, ifname_info, sizeof(brcm_ifname));
++	if ( (brcm_ptr = strstr(ifname_info, "__")) == NULL)
++	{
++		cmsUtl_strncpy(l2_ifname, ifname_info, sizeof(l2_ifname));
++	}
++	else
++	{
++		brcm_ifname[brcm_ptr-ifname_info] = '\0';
++		brcm_ptr += 2;
++		cmsUtl_strncpy(l2_ifname, brcm_ptr, sizeof(l2_ifname));
++	}
++
+ 	client6_init();
+ 	while (argc-- > 0) { 
+-		if ((ifp = ifinit(argv[0])) == NULL) {
++		if ((ifp = ifinit(brcm_ifname)) == NULL) {
+ 			dprintf(LOG_ERR, FNAME, "failed to initialize %s",
+-			    argv[0]);
++			    brcm_ifname);
+ 			exit(1);
+ 		}
+ 		argv++;
+@@ -225,10 +333,12 @@
+ 		exit(1);
+ 	}
+ 
++#if 0 //brcm
+ 	if (foreground == 0 && infreq_mode == 0) {
+ 		if (daemon(0, 0) < 0)
+ 			err(1, "daemon");
+ 	}
++#endif
+ 
+ 	/* dump current PID */
+ 	pid = getpid();
+@@ -259,8 +369,11 @@
+ 	static struct sockaddr_in6 sa6_allagent_storage;
+ 	int error, on = 1;
+ 
++    //brcm
++    struct ifreq if_client;
++    
+ 	/* get our DUID */
+-	if (get_duid(DUID_FILE, &client_duid)) {
++	if (get_duid(DUID_FILE, &client_duid, l2_ifname)) {
+ 		dprintf(LOG_ERR, FNAME, "failed to get a DUID");
+ 		exit(1);
+ 	}
+@@ -271,6 +384,15 @@
+ 		/* run the server anyway */
+ 	}
+ 
++	//brcm
++ 	if ((is_bdk == TRUE) && (requesterId == EID_OMCID)) {
++		const char *busName = GPON_MSG_BUS;
++		cmsMsg_initOnBus(EID_DHCP6C, EIF_MULTIPLE_INSTANCES, busName, &msgHandle);
++	}
++	else { 
++		cmsMsg_initWithFlags(EID_DHCP6C, EIF_MULTIPLE_INSTANCES, &msgHandle);
++	}
++
+ 	memset(&hints, 0, sizeof(hints));
+ 	hints.ai_family = PF_INET6;
+ 	hints.ai_socktype = SOCK_DGRAM;
+@@ -295,6 +417,21 @@
+ 		freeaddrinfo(res);
+ 		exit(1);
+ 	}
++
++    //brcm, bind with dev
++	//message may be not received by correct socket if multiple clients exist
++    if (brcm_ifname[0] != '\0')
++    {
++        memset(&if_client, 0, sizeof(if_client));
++        strncpy(if_client.ifr_name, brcm_ifname, sizeof(if_client.ifr_name)-1);
++        if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE,
++                  (char *)&if_client, sizeof(if_client)) < 0) {
++             dprintf(LOG_ERR, FNAME,
++                 "setsockopt(SO_BINDTODEVICE): %s",
++                 strerror(errno));
++         }
++     }
++    
+ #ifdef IPV6_RECVPKTINFO
+ 	if (setsockopt(sock, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on,
+ 		       sizeof(on)) < 0) {
+@@ -385,6 +522,11 @@
+ 		    strerror(errno));
+ 		exit(1);
+ 	}
++	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
++		dprintf(LOG_WARNING, FNAME, "failed to set signal: %s",
++		    strerror(errno));
++		exit(1);
++	}
+ }
+ 
+ int
+@@ -487,7 +629,8 @@
+ 		 * exit for now.
+ 		 */
+ 		if (!TAILQ_EMPTY(&ifp->event_list))
+-			return;
++			dprintf(LOG_INFO, FNAME, "WARNING: EVENT LEFT WHILE EXITING!!");
++//			return;   //brcm: TODO!!
+ 	}
+ 
+ 	/* We have no existing event.  Do exit. */
+@@ -828,6 +971,10 @@
+ 		dprintf(LOG_INFO, FNAME, "no responses were received");
+ 		dhcp6_remove_event(ev);
+ 
++		/* brcm: pass cdrouter dhcpv6_140 */
++		if (state == DHCP6S_REQUEST)
++			client6_start(ifp);
++
+ 		if (state == DHCP6S_RELEASE)
+ 			check_exit();
+ 
+@@ -841,11 +988,17 @@
+ 			ev->state = DHCP6S_INFOREQ;
+ 		else {
+ 			ev->state = DHCP6S_SOLICIT;
++			if (!IN6_IS_ADDR_UNSPECIFIED(&knownDst))
++				memset(&knownDst, 0, sizeof(knownDst));
+ 			if (construct_confdata(ifp, ev)) {
+ 				dprintf(LOG_ERR, FNAME, "can't send solicit");
+ 				exit(1); /* XXX */
+ 			}
+ 		}
++		if ((!ifp->maxSolTimeo && !ifp->maxInfTimeo) && 
++			(ev->state != DHCP6S_SOLICIT))
++			sleep(2); /* dhcpv6_140: its a burden */
++		
+ 		dhcp6_set_timeoparam(ev); /* XXX */
+ 		/* fall through */
+ 	case DHCP6S_REQUEST:
+@@ -887,6 +1040,8 @@
+ 				    "can't copy server ID");
+ 				return (NULL); /* XXX: better recovery? */
+ 			}
++			ifp->maxSolTimeo = ev->current_server->maxSolTimeo;
++			ifp->maxInfTimeo = ev->current_server->maxInfTimeo;
+ 			ev->timeouts = 0;
+ 			ev->state = DHCP6S_REQUEST;
+ 			dhcp6_set_timeoparam(ev);
+@@ -1242,6 +1397,14 @@
+ 		optinfo.rapidcommit = 1;
+ 	}
+ 
++// brcm - begin
++	/* reconf accept (pass cdrouter v6_cpe_1_2) */
++	if (ev->state == DHCP6S_SOLICIT ||
++	    ev->state == DHCP6S_REQUEST) {
++		optinfo.reconfaccept = 1;
++	}
++// brcm -end
++
+ 	/* elapsed time */
+ 	if (ev->timeouts == 0) {
+ 		gettimeofday(&ev->tv_start, NULL);
+@@ -1281,6 +1444,43 @@
+ 		goto end;
+ 	}
+ 
++// brcm - begin
++// some servers require the client to explicitly request DNS option
++	if (ev->state != DHCP6S_RELEASE) {
++		struct dhcp6_list lst;
++		struct dhcp6_listval ent1;
++		struct dhcp6_listval ent2;
++		struct dhcp6_listval ent3;
++
++
++		//fprintf(stderr, "***dhcp6c (%s): adding custom requested options: 83 & 82 & 17\n", __func__);
++		TAILQ_INIT(&lst);
++
++		memset(&ent1, 0, sizeof(ent1));
++		TAILQ_INIT(&ent1.sublist);
++		ent1.type = DHCP6_LISTVAL_NUM;
++		ent1.val_num = DH6OPT_INF_MAX_RT; //83
++		TAILQ_INSERT_HEAD(&lst, &ent1, link);
++
++		memset(&ent2, 0, sizeof(ent2));
++		TAILQ_INIT(&ent2.sublist);
++		ent2.type = DHCP6_LISTVAL_NUM;
++		ent2.val_num = DH6OPT_SOL_MAX_RT; //82
++		TAILQ_INSERT_HEAD(&lst, &ent2, link);
++
++		memset(&ent3, 0, sizeof(ent3));
++		TAILQ_INIT(&ent3.sublist);
++		ent3.type = DHCP6_LISTVAL_NUM;
++		ent3.val_num = DH6OPT_VENDOR_OPTS; //17
++		TAILQ_INSERT_HEAD(&lst, &ent3, link);
++
++		if (dhcp6_copy_list(&optinfo.reqopt_list, &lst)) {
++			fprintf(stderr, "failed to copy custom requested options\n");
++			goto end;
++		}
++	}
++// brcm -end
++
+ 	/* configuration information specified as event data */
+ 	for (evd = TAILQ_FIRST(&ev->data_list); evd;
+ 	     evd = TAILQ_NEXT(evd, link)) {
+@@ -1355,6 +1555,17 @@
+ 	dst = *sa6_allagent;
+ 	dst.sin6_scope_id = ifp->linkid;
+ 
++	/* check for the cdrouter dhcpv6_130 */
++	switch (ev->state) {
++	case DHCP6S_RENEW:
++	case DHCP6S_RELEASE:
++		if (!IN6_IS_ADDR_UNSPECIFIED(&knownDst)) {
++			memcpy(&dst.sin6_addr, &knownDst, sizeof(dst.sin6_addr));
++			dst.sin6_scope_id = 0;
++		}
++		break;
++	}
++
+ 	if (sendto(sock, buf, len, 0, (struct sockaddr *)&dst,
+ 	    sysdep_sa_len((struct sockaddr *)&dst)) == -1) {
+ 		dprintf(LOG_ERR, FNAME,
+@@ -1396,7 +1607,8 @@
+ static void
+ client6_recv()
+ {
+-	char rbuf[BUFSIZ], cmsgbuf[BUFSIZ];
++	char rbuf[4608]; /* brcm: pass cdrouter dhcpv6_14 */
++	char cmsgbuf[BUFSIZ];
+ 	struct msghdr mhdr;
+ 	struct iovec iov;
+ 	struct sockaddr_storage from;
+@@ -1439,8 +1651,14 @@
+ 	}
+ 
+ 	if ((ifp = find_ifconfbyid((unsigned int)pi->ipi6_ifindex)) == NULL) {
+-		dprintf(LOG_INFO, FNAME, "unexpected interface (%d)",
+-		    (unsigned int)pi->ipi6_ifindex);
++		dprintf(LOG_INFO, FNAME, "unexpected interface (%d) (rcv pid=%d)",
++		    (unsigned int)pi->ipi6_ifindex, getpid());
++		//brcm- for debug purpose
++		dh6 = (struct dhcp6 *)rbuf;
++		dprintf(LOG_DEBUG, FNAME, "receive %s from %s on ---",
++				dhcp6msgstr(dh6->dh6_msgtype),
++				addr2str((struct sockaddr *)&from));
++
+ 		return;
+ 	}
+ 
+@@ -1471,6 +1689,11 @@
+ 	case DH6_REPLY:
+ 		(void)client6_recvreply(ifp, dh6, len, &optinfo);
+ 		break;
++	/* brcm start */	
++	case DH6_RECONFIGURE:
++		(void)client6_recvreconfig(ifp, dh6, len, &optinfo);
++		break;
++    /* brcm end */
+ 	default:
+ 		dprintf(LOG_INFO, FNAME, "received an unexpected message (%s) "
+ 		    "from %s", dhcp6msgstr(dh6->dh6_msgtype),
+@@ -1557,7 +1780,14 @@
+ 		    DHCP6_LISTVAL_STCODE, &stcode, 0)) {
+ 			dprintf(LOG_INFO, FNAME,
+ 			    "advertise contains %s status", stcodestr);
+-			return (-1);
++
++			/* 
++			* brcm:
++			* RFC 6204: WPD-7: if request IA_NA and IA_PD, CPE should take
++			* IA_PD info even without address info.
++			*/
++			if ( stcode == DH6OPT_STCODE_NOPREFIXAVAIL )
++				return (-1);
+ 		}
+ 	}
+ 
+@@ -1616,6 +1846,20 @@
+ 	if (optinfo->pref != DH6OPT_PREF_UNDEF)
+ 		newserver->pref = optinfo->pref;
+ 	newserver->active = 1;
++	{
++		struct dhcp6_listval *d;
++
++		/* locate the server address */
++		d = TAILQ_FIRST(&optinfo->unicast_list);
++		if (d != NULL)
++			memcpy(&newserver->unicastAddr, &d->val_addr6, sizeof(d->val_addr6));
++
++		/* update default values of SOL_MAX_RT & INF_MAX_RT */
++		if (optinfo->maxSolTimeo != 0)
++			newserver->maxSolTimeo = optinfo->maxSolTimeo;
++		if (optinfo->maxInfTimeo != 0)
++			newserver->maxInfTimeo = optinfo->maxInfTimeo;
++	}
+ 	for (sp = &ev->servers; *sp; sp = &(*sp)->next) {
+ 		if ((*sp)->pref != DH6OPT_PREF_MAX &&
+ 		    (*sp)->pref < newserver->pref) {
+@@ -1644,6 +1888,9 @@
+ 			return (-1); /* XXX */
+ 		}
+ 
++		ifp->maxSolTimeo = newserver->maxSolTimeo;
++		ifp->maxSolTimeo = newserver->maxInfTimeo;
++
+ 		ev->timeouts = 0;
+ 		ev->state = DHCP6S_REQUEST;
+ 
+@@ -1699,6 +1946,83 @@
+ 	return (NULL);
+ }
+ 
++/* brcm start, 21-5-1 of RFC3315*/
++static int
++client6_recvreconfig(ifp, dh6, len, optinfo)
++	struct dhcp6_if *ifp;
++	struct dhcp6 *dh6;
++	ssize_t len;
++	struct dhcp6_optinfo *optinfo;
++{
++	struct keyinfo *reconfigkey = NULL;
++
++	/* packet validation based on Section 21-5-1 of RFC3315. */
++	if (optinfo->serverID.duid_len == 0) {
++		dprintf(LOG_INFO, FNAME, "no server ID option");
++		return (-1);
++	} else {
++		dprintf(LOG_DEBUG, FNAME, "server ID: %s, pref=%d",
++		    duidstr(&optinfo->serverID),
++		    optinfo->pref);
++	}
++	
++	if (optinfo->clientID.duid_len == 0) {
++		dprintf(LOG_INFO, FNAME, "no client ID option");
++		return (-1);
++	}
++	
++	if (duidcmp(&optinfo->clientID, &client_duid)) {
++		dprintf(LOG_INFO, FNAME, "client DUID mismatch");
++		return (-1);
++	}
++
++	if (optinfo->authproto != DHCP6_AUTHPROTO_RECONFIG) {
++		dprintf(LOG_INFO, FNAME, "reconfig authproto mismatch");
++		return (-1);
++	}
++
++	if (optinfo->reconfigauth_type  != DHCP6_RECONFIG_HMACMD5) {
++		dprintf(LOG_INFO, FNAME, "reconfig type mismatch");
++		return (-1);
++	}
++
++	if (optinfo->reconfigauth_offset == 0) {
++		dprintf(LOG_INFO, FNAME, "reconfig offset mismatch");
++		return (-1);
++	}
++
++	if (optinfo->authalgorithm != DHCP6_AUTHALG_HMACMD5) {
++		dprintf(LOG_INFO, FNAME, "reconfig authalgorithm mismatch");
++		return (-1);
++	}
++
++	/* validate authentication */
++	if ((reconfigkey = malloc(sizeof(*reconfigkey))) != NULL) {
++		
++		memset(reconfigkey, 0, sizeof(*reconfigkey));
++
++		if ((reconfigkey->secret = malloc(16)) != NULL) {
++			reconfigkey->secretlen = 16;
++			memcpy(reconfigkey->secret, ifp->reconfigkeyval, 16);
++
++			if (dhcp6_verify_mac((char *)dh6, len, optinfo->authproto,
++				optinfo->authalgorithm,
++				optinfo->reconfigauth_offset + sizeof(*dh6), reconfigkey) != 0) {
++				dprintf(LOG_INFO, FNAME, "reconfig message authentication invalid");
++				free(reconfigkey);
++				return (-1);
++			} 
++		
++			(void)renew_all_ia(ifp);
++		}
++		
++		free(reconfigkey);
++	}
++	
++	return (0);
++}
++/* brcm end */
++
+ static int
+ client6_recvreply(ifp, dh6, len, optinfo)
+ 	struct dhcp6_if *ifp;
+@@ -1801,6 +2125,19 @@
+ 		}
+ 	}
+ 
++	/* brcm start */
++	/*keep the reconfig key, 21-5-1 of RFC3315*/
++	if ((optinfo->reconfigauth_type == DHCP6_RECONFIG_KEYVAL) &&
++		(optinfo->reconfigauth_val[0] != '\0') &&
++		(optinfo->reconfigauth_offset > 0)) {
++		memcpy(ifp->reconfigkeyval, optinfo->reconfigauth_val, sizeof(ifp->reconfigkeyval));
++	}
++
++	updateDhcp6sConfDnsList(optinfo);
++	sendAftrEventMessage(optinfo);
++	sendMapEventMessage(optinfo);
++	/* brcm end */
++
+ 	if (!TAILQ_EMPTY(&optinfo->ntp_list)) {
+ 		struct dhcp6_listval *d;
+ 		int i = 0;
+@@ -1810,6 +2147,10 @@
+ 			info_printf("NTP server[%d] %s",
+ 			    i, in6addr2str(&d->val_addr6, 0));
+ 		}
++
++	/* brcm start */
++		copyoutNtpList(optinfo);
++	/* brcm end */
+ 	}
+ 
+ 	if (!TAILQ_EMPTY(&optinfo->sip_list)) {
+@@ -1895,6 +2236,41 @@
+ 		    &optinfo->serverID, ev->authparam);
+ 	}
+ 
++	/* brcm start */
++	if (ifp->maxSolTimeo != 0)
++	{
++		ifp->maxSolTimeo = 0;
++	}
++	if (ifp->maxInfTimeo != 0)
++	{
++		ifp->maxInfTimeo = 0;
++	}
++	if (optinfo->acsURL[0] != '\0')
++	{
++		strcpy(dhcp6cMsgBody.acsURL, optinfo->acsURL);
++	}
++	if (optinfo->acsProvisioningCode[0] != '\0')
++	{
++		strcpy(dhcp6cMsgBody.acsProvisioningCode, optinfo->acsProvisioningCode);
++	}
++	if (optinfo->cwmpRetryMinimumWaitInterval != 0)
++	{
++		dhcp6cMsgBody.cwmpRetryMinimumWaitInterval = optinfo->cwmpRetryMinimumWaitInterval;
++	}
++	if (optinfo->cwmpRetryIntervalMultiplier != 0)
++	{
++		dhcp6cMsgBody.cwmpRetryIntervalMultiplier = optinfo->cwmpRetryIntervalMultiplier;
++	}
++	if (ev->current_server && !IN6_IS_ADDR_UNSPECIFIED(&ev->current_server->unicastAddr))
++	{
++		memcpy(&knownDst, &ev->current_server->unicastAddr, sizeof(knownDst));
++	}
++
++	//Now, we should finish updating prefix, addr, and dns info
++	//send the message to smd now.
++	sendDhcp6cEventMessage();
++	/* brcm end */
++
+ 	dhcp6_remove_event(ev);
+ 
+ 	if (state == DHCP6S_RELEASE) {
+@@ -2153,3 +2529,321 @@
+ 
+ 	va_end(ap);
+ }
++
++/* brcm start */
++int updateDhcp6sConfDnsList(struct dhcp6_optinfo *opt)
++{
++   struct dhcp6_listval *d;
++   char   nameserver[BUFLEN_128]="";
++   char   domainName[BUFLEN_64]="";
++
++   d = TAILQ_FIRST(&opt->dns_list);
++   if (d != NULL)
++   {
++      sprintf(nameserver, "%s", in6addr2str(&d->val_addr6, 0));
++
++      d = TAILQ_NEXT(d, link);
++      if (d != NULL)
++      {
++         size_t maxlen = sizeof(nameserver);
++         size_t n;
++
++         strcat(nameserver, ",");
++         n = maxlen - strlen(nameserver) - 1;
++         strncat(nameserver, in6addr2str(&d->val_addr6, 0), n);
++      }
++   }
++
++   d = TAILQ_FIRST(&opt->dnsname_list);
++   if (d!=NULL)
++   {
++      sprintf(domainName, "%s", d->val_vbuf.dv_buf);
++
++      /* 
++       * FIXME: last character in domainName is always '.'
++       * Solution: always set to '\0', but better to figure out why!
++       */
++      if (strlen(domainName) > 0) domainName[strlen(domainName)-1]='\0';
++   }
++
++   sendDnsEventMessage(nameserver, domainName);
++
++   return 0;
++
++}  /* End of updateDhcp6sConfDnsList() */
++
++void sendDnsEventMessage(const char *nameserver, const char *domainName)
++{
++   if ( nameserver && nameserver[0]!='\0' )
++   {
++	   dhcp6cMsgBody.dnsAssigned = TRUE;
++	   strncpy(dhcp6cMsgBody.nameserver, nameserver, sizeof(dhcp6cMsgBody.nameserver)-1);
++
++	   dprintf(LOG_NOTICE, FNAME, "DHCP6C_DNS_SERVER_CHANGED: %s", dhcp6cMsgBody.nameserver);
++   }
++
++   if ( domainName && domainName[0]!='\0' )
++   {
++	   dhcp6cMsgBody.domainNameAssigned = TRUE;
++	   strncpy(dhcp6cMsgBody.domainName, domainName, sizeof(dhcp6cMsgBody.domainName)-1);
++
++	   dprintf(LOG_NOTICE, FNAME, "DHCP6C_DOMAINNAME_CHANGED: %s", dhcp6cMsgBody.domainName);
++   }
++
++	return;
++
++}  /* End of sendDnsEventMessage() */
++
++int sendAftrEventMessage(struct dhcp6_optinfo *opt)
++{
++   struct dhcp6_listval *d;
++   char   aftr[CMS_AFTR_NAME_LENGTH]="";
++
++   d = TAILQ_FIRST(&opt->aftr_list);
++   if (d!=NULL)
++   {
++      sprintf(aftr, "%s", d->val_vbuf.dv_buf);
++
++      /* 
++       * FIXME: last character in aftr is always '.'
++       * Solution: always set to '\0', but better to figure out why!
++       */
++      if (strlen(aftr) > 0) 
++      {
++         aftr[strlen(aftr)-1]='\0';
++      }
++
++      dhcp6cMsgBody.aftrAssigned = TRUE;
++      strcpy(dhcp6cMsgBody.aftr, aftr);
++
++      dprintf(LOG_NOTICE, FNAME, "DHCP6C_AFTR_CHANGED: %s", dhcp6cMsgBody.aftr);
++   }
++
++   return 0;
++}  /* End of sendAftrEventMessage() */
++
++int sendMapEventMessage(struct dhcp6_optinfo *opt)
++{
++   struct dhcp6_listval *d;
++
++   d = TAILQ_FIRST(&opt->map_list);
++   if (d!=NULL)
++   {
++      struct dhcp6opt *np, opth, *p, *ep;
++      int opt, optlen;
++      char *cp;
++
++      p = (struct dhcp6opt *)d->val_vbuf.dv_buf;
++      ep = (struct dhcp6opt *)((char *)d->val_vbuf.dv_buf + d->val_vbuf.dv_len);
++
++      for (; p + 1 <= ep; p = np) 
++      {
++         memcpy(&opth, p, sizeof(opth));
++         optlen = ntohs(opth.dh6opt_len);
++         opt = ntohs(opth.dh6opt_type);
++
++         cp = (char *)(p + 1);
++         np = (struct dhcp6opt *)(cp + optlen);
++
++         /* option length field overrun */
++         if (np > ep) {
++            dprintf(LOG_INFO, FNAME, "malformed MAP%c options",
++               dhcp6cMsgBody.maptAssigned ? 'T' : (dhcp6cMsgBody.mapeAssigned ? 'E' : '?'));
++            if (dhcp6cMsgBody.mapeAssigned)
++               dhcp6cMsgBody.mapeAssigned = FALSE;
++            if (dhcp6cMsgBody.maptAssigned)
++               dhcp6cMsgBody.maptAssigned = FALSE;
++            goto fail;
++         }
++
++         switch (opt) {
++            case DH6OPT_S46_RULE:
++            {
++               char * temp_ptr;
++               int i, flag, ealen, v4len, v4addr, v6len, v6bytelen, v6bitlen;
++               unsigned char *addr_str;
++               struct in6_addr v6addr;
++               char v6prefix[CMS_IPADDR_LENGTH];
++
++               temp_ptr = cp;
++               flag = (int)*temp_ptr;
++               ealen = (int)*(++temp_ptr);
++               v4len = (int)*(++temp_ptr);
++               temp_ptr++;
++               v4addr = *((int *)temp_ptr);
++               temp_ptr += 4;
++               addr_str = (unsigned char *) &v4addr;
++
++               dhcp6cMsgBody.eaLen = ealen;
++               dhcp6cMsgBody.isFMR = !flag?0:1;
++               sprintf(dhcp6cMsgBody.ruleIPv4Prefix, "%d.%d.%d.%d/%d", 
++                       addr_str[0], addr_str[1], addr_str[2], addr_str[3], v4len);
++
++               v6len = (int)*temp_ptr;
++               v6bytelen = v6len / 8;
++               v6bitlen = v6len % 8;
++               temp_ptr++;
++
++               memset(&v6addr, 0, sizeof(v6addr));
++               memcpy(&v6addr, temp_ptr, v6bytelen + (v6bitlen?1:0));
++               if (v6bitlen) *((char *)&v6addr + v6bytelen) &= 0xff << (8 - v6bitlen);
++               sprintf(v6prefix, "%s/%d", in6addr2str(&v6addr, 0), v6len);
++               strncpy(dhcp6cMsgBody.ruleIPv6Prefix, v6prefix, sizeof(dhcp6cMsgBody.ruleIPv6Prefix)-1);
++
++               /* 
++                * check port parameter option:
++                * prefix6_len, located at 8th byte in rule option, specifies
++                * the length of following v6prefix. So the length of port
++                * param option, if any, must be rule_opt_len minus 8 minus v6bytelen minus (1 or 0)
++                */
++               i = optlen - 8 - v6bytelen - (v6bitlen?1:0);
++               if (i > 0)
++               {
++                  /* this rule option includes port param option */
++                  if (i == 8) //Only support one port param option per rule option
++                  {
++                     struct dhcp6opt port_opt;
++                     int opcode, optionlen;
++
++                     temp_ptr += v6bytelen + (v6bitlen?1:0);
++                     memcpy(&port_opt, temp_ptr, sizeof(port_opt));
++                     optionlen = ntohs(port_opt.dh6opt_len);
++                     opcode = ntohs(port_opt.dh6opt_type);
++
++                     if ( opcode == DH6OPT_S46_PORT_PARAM &&
++                          optionlen == 4 )
++                     {
++                        temp_ptr += 4;
++                        dhcp6cMsgBody.psidOffset = (int)*temp_ptr;
++                        dhcp6cMsgBody.psidLen = (int)*(++temp_ptr);
++                        temp_ptr++;
++
++                        /*
++                         * RFC 7598: 4.5: 16 bits long. The first k bits on the left of
++                         * this field contain the PSID binary value. The remaining (16 - k)
++                         * bits on the right are padding zeros.
++                         */
++                        dhcp6cMsgBody.psid = ntohs(*((u_int16_t *)temp_ptr)) >> (16 - dhcp6cMsgBody.psidLen);
++                     }
++                  }
++                  else
++                  {
++                     dprintf(LOG_INFO, FNAME, "port param option len not equal to 8");
++                  }
++               }
++
++               break;
++            }
++            case DH6OPT_S46_BR:
++            {
++               struct in6_addr addr;
++               char br[CMS_IPADDR_LENGTH];
++
++               dhcp6cMsgBody.mapeAssigned = TRUE;
++
++               memcpy(&addr, cp, optlen);
++               sprintf(br, "%s/%d", in6addr2str(&addr, 0), (optlen*8));
++               strncpy(dhcp6cMsgBody.brIPv6Prefix, br, sizeof(dhcp6cMsgBody.brIPv6Prefix)-1);
++               break;
++            }
++            case DH6OPT_S46_DMR:
++            {
++               struct in6_addr addr;
++               int len;
++               char *temp_ptr;
++               char br[CMS_IPADDR_LENGTH];
++
++               len = (int)*cp;
++               memset(&addr, 0, sizeof(addr));
++               temp_ptr = cp;
++
++               temp_ptr++;
++
++               dhcp6cMsgBody.maptAssigned = TRUE;
++
++               memcpy(&addr, temp_ptr, (len/8)); //RFC 6052: 2.2: len%8 must be 0!
++               sprintf(br, "%s/%d", in6addr2str(&addr, 0), len);
++               strncpy(dhcp6cMsgBody.brIPv6Prefix, br, sizeof(dhcp6cMsgBody.brIPv6Prefix)-1);
++               break;
++            }	
++            default:
++               /* no option specific behavior */
++               dprintf(LOG_INFO, FNAME,
++               "unknown or unexpected MAP%c option %s, len %d",
++               dhcp6cMsgBody.maptAssigned ? 'T' : (dhcp6cMsgBody.mapeAssigned ? 'E' : '?'),
++               dhcp6optstr(opt), optlen);
++               break;
++         }
++      }
++
++      if (dhcp6cMsgBody.maptAssigned && dhcp6cMsgBody.mapeAssigned)
++      {
++         /* silently ignore */
++         dhcp6cMsgBody.mapeAssigned = FALSE;
++         dhcp6cMsgBody.maptAssigned = FALSE;
++      }
++
++fail:
++      dprintf(LOG_NOTICE, FNAME, "DHCP6C_MAPE_CHANGED: %d", dhcp6cMsgBody.mapeAssigned);
++      dprintf(LOG_NOTICE, FNAME, "DHCP6C_MAPT_CHANGED: %d", dhcp6cMsgBody.maptAssigned);
++   }
++
++   return 0;
++}  /* End of sendMapEventMessage() */
++
++void copyoutNtpList(struct dhcp6_optinfo *opt)
++{
++   struct dhcp6_listval *d;
++   size_t maxlen = sizeof(dhcp6cMsgBody.ntpserver);
++   size_t n;
++
++   d = TAILQ_FIRST(&opt->ntp_list);
++   if (d != NULL)
++   {
++      // miwang: assumes the server gave us an address, but RFC5908 says
++      // server can give us FQDN
++      snprintf(dhcp6cMsgBody.ntpserver, maxlen-1, "%s", in6addr2str(&d->val_addr6, 0));
++
++      d = TAILQ_NEXT(d, link);
++      if (d != NULL)
++      {
++         n = maxlen - strlen(dhcp6cMsgBody.ntpserver) - 1;
++         strncat(dhcp6cMsgBody.ntpserver, ",", n);
++
++         n = maxlen - strlen(dhcp6cMsgBody.ntpserver) - 1;
++         strncat(dhcp6cMsgBody.ntpserver, in6addr2str(&d->val_addr6, 0), n);
++      }
++   }
++
++   return;
++}
++
++void sendDhcp6cEventMessage(void)
++{
++   char buf[sizeof(CmsMsgHeader) + sizeof(Dhcp6cStateChangedMsgBody)]={0};
++   CmsMsgHeader *msg=(CmsMsgHeader *) buf;
++   Dhcp6cStateChangedMsgBody *dhcp6cBody = (Dhcp6cStateChangedMsgBody *) (msg+1);
++   CmsRet ret;
++
++   msg->type = CMS_MSG_DHCP6C_STATE_CHANGED;
++   msg->src = MAKE_SPECIFIC_EID(getpid(), EID_DHCP6C);
++   msg->dst = (requesterId != 0) ? requesterId : EID_SMD;
++   msg->flags_event = 1;
++   msg->dataLength = sizeof(Dhcp6cStateChangedMsgBody);
++
++   memcpy(dhcp6cBody, &dhcp6cMsgBody, sizeof(Dhcp6cStateChangedMsgBody));
++
++   if ((ret = cmsMsg_send(msgHandle, msg)) != CMSRET_SUCCESS)
++   {
++      dprintf(LOG_ERR, FNAME, "could not send out DHCP6C_STATUS_CHANGED, ret=%d", ret);
++   }
++   else
++   {
++      dprintf(LOG_NOTICE, FNAME, "sent out DHCP6C_STATUS_CHANGED");
++   }
++
++	memset(&dhcp6cMsgBody, 0, sizeof(Dhcp6cStateChangedMsgBody));
++   return;
++
++}  /* End of sendDhcp6cEventMessage() */
++/* brcm end */
+diff -urN wide-dhcpv6-20080615-coverity/dhcp6c_ia.c dhcpv6/dhcp6c_ia.c
+--- wide-dhcpv6-20080615-coverity/dhcp6c_ia.c	2007-03-21 17:52:55.000000000 +0800
++++ dhcpv6/dhcp6c_ia.c	2022-08-09 18:11:57.673491988 +0800
+@@ -49,6 +49,7 @@
+ #include "prefixconf.h"
+ #include "addrconf.h"
+ 
++#if 0 //brcm
+ typedef enum {IAS_ACTIVE, IAS_RENEW, IAS_REBIND} iastate_t;
+ 
+ struct ia {
+@@ -76,11 +77,13 @@
+ 	/* authentication parameters for transaction with servers on this IA */
+ 	struct authparam *authparam;
+ };
++#endif
+ 
+ static int update_authparam __P((struct ia *, struct authparam *));
+ static void reestablish_ia __P((struct ia *));
+ static void callback __P((struct ia *));
+ static int release_ia __P((struct ia *));
++static int renew_ia __P((struct ia *));
+ static void remove_ia __P((struct ia *));
+ static struct ia *get_ia __P((iatype_t, struct dhcp6_if *, struct ia_conf *,
+     struct dhcp6_listval *, struct duid *));
+@@ -433,6 +436,108 @@
+ 	}
+ }
+ 
++/* brcm start */
++void
++renew_all_ia(ifp)
++	struct dhcp6_if *ifp;
++{
++	struct ia_conf *iac;
++	struct ia *ia, *ia_next;
++
++	for (iac = TAILQ_FIRST(&ifp->iaconf_list); iac;
++	    iac = TAILQ_NEXT(iac, link)) {
++		for (ia = TAILQ_FIRST(&iac->iadata); ia; ia = ia_next) {
++			ia_next = TAILQ_NEXT(ia, link);	
++			(void)renew_ia(ia);
++		}
++	}
++}
++
++static int
++renew_ia(ia)
++	struct ia *ia;
++{
++	struct dhcp6_ia iaparam;
++	struct dhcp6_event *ev;
++	struct dhcp6_eventdata *evd;
++	struct timeval timo;
++
++	/* cancel the current event for the prefix. */
++	if (ia->evdata) {
++		TAILQ_REMOVE(&ia->evdata->event->data_list, ia->evdata, link);
++		if (ia->evdata->destructor)
++			ia->evdata->destructor(ia->evdata);
++		free(ia->evdata);
++		ia->evdata = NULL;
++	}
++
++	timo.tv_sec = ia->t1 < ia->t2 ? ia->t2 - ia->t1 : 0;
++	timo.tv_usec = 0;
++	dhcp6_set_timer(&timo, ia->timer);
++
++	if ((ev = dhcp6_create_event(ia->ifp, DHCP6S_RENEW)) == NULL) {
++		dprintf(LOG_ERR, FNAME, "failed to create a new event");
++		goto fail;
++	}
++	TAILQ_INSERT_TAIL(&ia->ifp->event_list, ev, link);
++
++	if ((ev->timer = dhcp6_add_timer(client6_timo, ev)) == NULL) {
++		dprintf(LOG_ERR, FNAME,
++		    "failed to create a new event timer");
++		goto fail;
++	}
++
++	if ((evd = malloc(sizeof(*evd))) == NULL) {
++		dprintf(LOG_ERR, FNAME,
++		    "failed to create a new event data");
++		goto fail;
++	}
++	memset(evd, 0, sizeof(*evd));
++	evd->event = ev;
++	TAILQ_INSERT_TAIL(&ev->data_list, evd, link);
++
++	if (duidcpy(&ev->serverid, &ia->serverid)) {
++		dprintf(LOG_ERR, FNAME, "failed to copy server ID");
++		goto fail;
++	}
++
++	iaparam.iaid = ia->conf->iaid;
++	iaparam.t1 = ia->t1;
++	iaparam.t2 = ia->t2;
++	
++	if (ia->ctl && ia->ctl->renew_data) {
++		if ((*ia->ctl->renew_data)(ia->ctl, &iaparam,
++		    &ia->evdata, evd)) {
++			dprintf(LOG_ERR, FNAME,
++			    "failed to make renew data");
++			goto fail;
++		}
++	}
++	
++	ev->timeouts = 0;
++	dhcp6_set_timeoparam(ev);
++	dhcp6_reset_timer(ev);
++
++	if (ia->authparam != NULL) {
++		if ((ev->authparam = copy_authparam(ia->authparam)) == NULL) {
++			dprintf(LOG_ERR, FNAME,
++			    "failed to copy authparam");
++			goto fail;
++		}
++	}
++
++	ia->evdata = evd;
++	client6_send(ev);
++
++	return (0);
++fail:
++	if (ev)
++		dhcp6_remove_event(ev);
++
++	return (-1);
++}
++/* brcm end */
++
+ static int
+ release_ia(ia)
+ 	struct ia *ia;
+@@ -444,6 +549,10 @@
+ 	dprintf(LOG_DEBUG, FNAME, "release an IA: %s-%lu",
+ 	    iastr(ia->conf->type), ia->conf->iaid);
+ 
++	if (ev = TAILQ_LAST(&ia->ifp->event_list, dhcp6_event_list)) {
++		ia->no6cRestart = ev->state == DHCP6S_INIT ? 1 : 0; //brcm
++	}
++
+ 	if ((ev = dhcp6_create_event(ia->ifp, DHCP6S_RELEASE))
+ 	    == NULL) {
+ 		dprintf(LOG_NOTICE, FNAME, "failed to create a new event");
+@@ -512,6 +621,7 @@
+ {
+ 	struct ia_conf *iac = ia->conf;
+ 	struct dhcp6_if *ifp = ia->ifp;
++	int no6cRestart = ia->no6cRestart;
+ 
+ 	dprintf(LOG_DEBUG, FNAME, "remove an IA: %s-%lu",
+ 	    iastr(ia->conf->type), ia->conf->iaid);
+@@ -539,7 +649,8 @@
+ 
+ 	free(ia);
+ 
+-	(void)client6_start(ifp);
++	if (!no6cRestart) //brcm
++		(void)client6_start(ifp);
+ }
+ 
+ static struct dhcp6_timer *
+diff -urN wide-dhcpv6-20080615-coverity/dhcp6c_ia.h dhcpv6/dhcp6c_ia.h
+--- wide-dhcpv6-20080615-coverity/dhcp6c_ia.h	2007-03-21 17:52:55.000000000 +0800
++++ dhcpv6/dhcp6c_ia.h	2022-08-09 18:11:57.673491988 +0800
+@@ -29,7 +29,35 @@
+  * SUCH DAMAGE.
+  */
+ 
+-struct ia;			/* this is an opaque type */
++//struct ia;			/* this is an opaque type */
++typedef enum {IAS_ACTIVE, IAS_RENEW, IAS_REBIND} iastate_t;
++
++struct ia {
++	TAILQ_ENTRY(ia) link;
++
++	/* back pointer to configuration */
++	struct ia_conf *conf;
++
++	/* common parameters of IA */
++	u_int32_t t1;		/* duration for renewal */
++	u_int32_t t2;		/* duration for rebind  */
++
++	/* internal parameters for renewal/rebinding */
++	iastate_t state;
++	struct dhcp6_timer *timer;
++	struct dhcp6_eventdata *evdata;
++	int no6cRestart;                /* if a restart of client6 is redundant */
++
++	/* DHCP related parameters */
++	struct dhcp6_if *ifp;	/* DHCP interface */
++	struct duid serverid;	/* the server ID that provided this IA */
++
++	/* control information shared with each particular config routine */
++	struct iactl *ctl;
++
++	/* authentication parameters for transaction with servers on this IA */
++	struct authparam *authparam;
++};
+ 
+ struct iactl {
+ 	struct ia *iactl_ia;	/* back pointer to IA */
+@@ -54,3 +82,4 @@
+ extern void update_ia __P((iatype_t, struct dhcp6_list *,
+     struct dhcp6_if *, struct duid *, struct authparam *));
+ extern void release_all_ia __P((struct dhcp6_if *));
++extern void renew_all_ia __P((struct dhcp6_if *));
+diff -urN wide-dhcpv6-20080615-coverity/dhcp6.h dhcpv6/dhcp6.h
+--- wide-dhcpv6-20080615-coverity/dhcp6.h	2007-03-21 17:52:53.000000000 +0800
++++ dhcpv6/dhcp6.h	2022-08-09 18:11:57.673491988 +0800
+@@ -86,9 +86,9 @@
+ /* timer parameters (msec, unless explicitly commented) */
+ #define SOL_MAX_DELAY	1000
+ #define SOL_TIMEOUT	1000
+-#define SOL_MAX_RT	120000
++#define SOL_MAX_RT	3600000 /* RFC7083: 120000 -> 3600000 */
+ #define INF_TIMEOUT	1000
+-#define INF_MAX_RT	120000
++#define INF_MAX_RT	3600000 /* RFC7083: 120000 -> 3600000 */
+ #define REQ_TIMEOUT	1000
+ #define REQ_MAX_RT	30000
+ #define REQ_MAX_RC	10	/* Max Request retry attempts */
+@@ -108,6 +108,11 @@
+ #define DHCP6_IRT_DEFAULT 86400	/* 1 day */
+ #define DHCP6_IRT_MINIMUM 600
+ 
++#define DHCP6_SOL_RT_MAXIMUM 86400
++#define DHCP6_SOL_RT_MINIMUM 60
++#define DHCP6_INF_RT_MAXIMUM 86400
++#define DHCP6_INF_RT_MINIMUM 60
++
+ /* DUID: DHCP unique Identifier */
+ struct duid {
+ 	size_t duid_len;	/* length */
+@@ -172,11 +177,14 @@
+ #define val_statefuladdr6 uv.uv_statefuladdr6
+ #define val_vbuf uv.uv_vbuf
+ 
++#include "cms.h"  // for CMS_MAX_ACS_URL_LENGTH
++
+ struct dhcp6_optinfo {
+ 	struct duid clientID;	/* DUID */
+ 	struct duid serverID;	/* DUID */
+ 
+ 	int rapidcommit;	/* bool */
++	int reconfaccept;	/* bool */
+ 	int pref;		/* server preference */
+ 	int32_t elapsed_time;	/* elapsed time (from client to server only) */
+ 	int64_t refreshtime;	/* info refresh time for stateless options */
+@@ -197,6 +205,15 @@
+ 	struct dhcp6_list nispname_list; /* NIS+ domain list */
+ 	struct dhcp6_list bcmcs_list; /* BCMC server list */
+ 	struct dhcp6_list bcmcsname_list; /* BCMC domain list */
++	struct dhcp6_list aftr_list; /* AFTR list */
++	struct dhcp6_list map_list; /* MAP-E/MAP-T list */
++	struct dhcp6_list unicast_list;	/* server unicast */
++	char acsURL[CMS_MAX_ACS_URL_LENGTH];    /* acsURL from dhcp server */
++	char acsProvisioningCode[CMS_MAX_ACS_PROVISIONING_CODE_LENGTH];    /* acs provisioning code from dhcp server */
++	u_int32_t cwmpRetryMinimumWaitInterval;  /* for TR69 */
++	u_int32_t cwmpRetryIntervalMultiplier;   /* for TR69 */
++	u_int32_t maxSolTimeo;	/* for RFC7083 */
++	u_int32_t maxInfTimeo;	/* for RFC7083 */
+ 
+ 	struct dhcp6_vbuf relay_msg; /* relay message */
+ #define relaymsg_len relay_msg.dv_len
+@@ -255,6 +272,15 @@
+ 	/* options follow */
+ } __attribute__ ((__packed__));
+ 
++// brcm-begin
++/* custom vendor class option struct for dslforum.org */
++struct vendor_class_data {
++	u_int32_t enterprise_number;
++	u_int16_t info1_len;
++	char info1_string[12]; /* NOTE: this struct is designed to hold "dslforum.org" or "pktc2.0" only!! */
++} __attribute__ ((__packed__));
++// brcm-end
++
+ /* options */
+ #define DH6OPT_CLIENTID	1
+ #define DH6OPT_SERVERID	2
+@@ -289,7 +315,7 @@
+ #define DH6OPT_VENDOR_OPTS 17
+ #define DH6OPT_INTERFACE_ID 18
+ #define DH6OPT_RECONF_MSG 19
+-
++#define DH6OPT_RECONF_ACCEPT 20
+ #define DH6OPT_SIP_SERVER_D 21
+ #define DH6OPT_SIP_SERVER_A 22
+ #define DH6OPT_DNS 23
+@@ -310,6 +336,20 @@
+ #define DH6OPT_SUBSCRIBER_ID 38
+ #define DH6OPT_CLIENT_FQDN 39
+ 
++/* brcm start */
++#define DH6OPT_AFTR_NAME 64
++#define DH6OPT_SOL_MAX_RT 82
++#define DH6OPT_INF_MAX_RT 83
++#define DH6OPT_S46_RULE  89
++#define DH6OPT_S46_BR   90
++#define DH6OPT_S46_DMR   91
++#define DH6OPT_S46_PORT_PARAM   93
++#define DH6OPT_S46_CONT_MAPE  94
++#define DH6OPT_S46_CONT_MAPT  95
++
++#define DH6OPT_EXTEND_MAX_NUM 64  /* the extended report/request option max number */
++/* brcm end */
++
+ /* The followings are KAME specific. */
+ 
+ struct dhcp6opt {
+@@ -322,7 +362,9 @@
+ struct dhcp6opt_duid_type1 {
+ 	u_int16_t dh6_duid1_type;
+ 	u_int16_t dh6_duid1_hwtype;
++#if 0 //brcm: Change to type 3 (DUID-LL).
+ 	u_int32_t dh6_duid1_time;
++#endif
+ 	/* link-layer address follows */
+ } __attribute__ ((__packed__));
+ 
+@@ -382,4 +424,10 @@
+ enum { DHCP6_AUTHALG_UNDEF = -1, DHCP6_AUTHALG_HMACMD5 = 1 };
+ enum { DHCP6_AUTHRDM_UNDEF = -1, DHCP6_AUTHRDM_MONOCOUNTER = 0 };
+ 
++/*bcm, 21-5-1 RFC3315 */
++enum { DHCP6_RECONFIG_KEYVAL = 1, DHCP6_RECONFIG_HMACMD5 = 2 };
++
++/* for debug */
++#include <debug.h>
++
+ #endif /*__DHCP6_H_DEFINED*/
+diff -urN wide-dhcpv6-20080615-coverity/dhcp6relay.c dhcpv6/dhcp6relay.c
+--- wide-dhcpv6-20080615-coverity/dhcp6relay.c	2022-08-09 18:10:34.398253608 +0800
++++ dhcpv6/dhcp6relay.c	2022-08-11 14:23:49.578474093 +0800
+@@ -207,8 +207,10 @@
+ 	}
+ 
+ 	if (foreground == 0) {
++#if 0 //brcm
+ 		if (daemon(0, 0) < 0)
+ 			err(1, "daemon");
++#endif
+ 		openlog(progname, LOG_NDELAY|LOG_PID, LOG_DAEMON);
+ 	}
+ 	setloglevel(debug);
+diff -urN wide-dhcpv6-20080615-coverity/dhcp6s.c dhcpv6/dhcp6s.c
+--- wide-dhcpv6-20080615-coverity/dhcp6s.c	2022-08-09 18:10:34.398253608 +0800
++++ dhcpv6/dhcp6s.c	2022-08-10 10:44:43.387945982 +0800
+@@ -81,6 +81,8 @@
+ #define DHCP6S_CONF SYSCONFDIR "/dhcp6s.conf"
+ #define DEFAULT_KEYFILE SYSCONFDIR "/dhcp6sctlkey"
+ #define DHCP6S_PIDFILE "/var/run/dhcp6s.pid"
++//brcm
++#define PATH_PROCNET_IFINET6   "/proc/net/if_inet6"
+ 
+ #define CTLSKEW 300
+ 
+@@ -138,7 +140,7 @@
+ 
+ static const struct sockaddr_in6 *sa6_any_downstream, *sa6_any_relay;
+ static struct msghdr rmh;
+-static char rdatabuf[BUFSIZ];
++static char rdatabuf[4608]; /* brcm: pass cdrouter dhcpv6_server_14 */
+ static int rmsgctllen;
+ static char *conffile = DHCP6S_CONF;
+ static char *rmsgctlbuf;
+@@ -315,10 +317,12 @@
+ 		exit(1);
+ 	}
+ 
++#if 0 //brcm
+ 	if (foreground == 0) {
+ 		if (daemon(0, 0) < 0)
+ 			err(1, "daemon");
+ 	}
++#endif
+ 
+ 	/* dump current PID */
+ 	pid = getpid();
+@@ -380,7 +384,7 @@
+ 	}
+ 
+ 	/* get our DUID */
+-	if (get_duid(DUID_FILE, &server_duid)) {
++	if (get_duid(DUID_FILE, &server_duid, device)) {
+ 		dprintf(LOG_ERR, FNAME, "failed to get a DUID");
+ 		exit(1);
+ 	}
+@@ -1605,13 +1609,16 @@
+ 
+ 		for (iana = TAILQ_FIRST(&optinfo->iana_list); iana;
+ 		    iana = TAILQ_NEXT(iana, link)) {
++			int retval;
+ 			/*
+ 			 * Find an appropriate address for each IA_NA,
+ 			 * removing the adopted addresses from the list.
+ 			 * The addresses will be bound to the client.
+ 			 */
+-			if (make_ia(iana, &conflist, &roptinfo.iana_list,
+-			    client_conf, 1) == 0) {
++			/* brcm: send NotOnLink status code if necessary */
++			retval = client_conf ? make_ia(iana, &conflist, &roptinfo.iana_list, client_conf, 1) : 0;
++
++			if (retval == 0) {
+ 				if (make_ia_stcode(DHCP6_LISTVAL_IANA,
+ 				    iana->val_ia.iaid,
+ 				    DH6OPT_STCODE_NOADDRSAVAIL,
+@@ -1622,6 +1629,17 @@
+ 					goto fail;
+ 				}
+ 			}
++			else if ( retval == -1 ) {
++				if (make_ia_stcode(DHCP6_LISTVAL_IANA,
++					iana->val_ia.iaid, DH6OPT_STCODE_NOTONLINK,
++					&roptinfo.iana_list)) 
++				{
++					dprintf(LOG_NOTICE, FNAME,
++					    "failed to make an option list");
++					dhcp6_clear_list(&conflist);
++					goto fail;
++				}
++			}
+ 		}
+ 
+ 		dhcp6_clear_list(&conflist);
+@@ -2168,6 +2186,7 @@
+ 	struct host_conf *client_conf;
+ 	u_int16_t stcode = DH6OPT_STCODE_SUCCESS;
+ 	int error;
++	int iana_found = 0;
+ 
+ 	/* message validation according to Section 15.5 of RFC3315 */
+ 
+@@ -2289,6 +2308,26 @@
+ 	}
+ 
+ 	/* 
++	 * brcm: DHCPv6 server ReadyLogo RFC3633 test 60:
++	 * If no IANA associated at all, don't reply
++	 */
++	for (iana = TAILQ_FIRST(&optinfo->iana_list); iana;
++	    iana = TAILQ_NEXT(iana, link)) {
++		if (client_conf &&
++		    find_binding(&client_conf->duid, DHCP6_BINDING_IA, 
++				iana->type, iana->val_ia.iaid) != NULL) {
++			iana_found = 1;
++			break;
++		}
++	}
++
++	if ( !iana_found ) {
++		dprintf(LOG_ERR, FNAME, "no iana found");
++		goto fail;
++	}
++	//brcm end
++
++	/* 
+ 	 * even when the given address seems to be on the appropriate link,
+ 	 * the confirm should be ignore if there's no corrensponding IA-NA
+ 	 * configuration.
+@@ -2303,6 +2342,18 @@
+ 		}
+ 	}
+ 
++	/* 
++	* brcm: DHCPv6 server ReadyLogo RFC3315 test 3:
++	* RFC3315 section 18.2.2 says the server only responses to confirm
++	* message with status code. No IA_NA is necessary.
++	* Question: if the address in the confirm pkt is not within the range
++	* in the configuration but in the same subnet in the configuration(/64),
++	* make_ia will update a new address within the range and reply.
++	* This change can pass the test but will not reply the correct address to
++	* the client!!!
++	*/
++	dhcp6_clear_list(&roptinfo.iana_list);
++    
+ send_reply:
+ 	if (dhcp6_add_listval(&roptinfo.stcode_list,
+ 	    DHCP6_LISTVAL_STCODE, &stcode, NULL) == NULL)
+@@ -2503,6 +2554,19 @@
+ 					dhcp6_clear_list(&ialist);
+ 					return (-1);
+ 				}
++
++				/*
++				 * brcm: 
++				 * DHCPv6 ReadyLogo RFC3633 test 39
++				 */
++				if ( !blv && (msgtype == DH6_RENEW) ) {
++					if (make_ia_stcode(iap->type, iap->val_ia.iaid,
++						DH6OPT_STCODE_NOBINDING, retlist)) {
++							dprintf(LOG_ERR, FNAME,
++						    "failed to make an option list");
++							return (-1);
++					}
++				}
+ 				break;
+ 			case DHCP6_LISTVAL_IANA:
+ 				if (lv->type != DHCP6_LISTVAL_STATEFULADDR6)
+@@ -2937,8 +3001,18 @@
+ 				found++;
+ 		} else if (spec->type == DHCP6_LISTVAL_IANA &&
+ 			client_conf->pool.name != NULL) {
+-			if (make_iana_from_pool(&client_conf->pool, specia, &ialist))
++			//brcm
++			int retval = make_iana_from_pool(&client_conf->pool, 
++							specia, &ialist);
++			if (retval == -1)
++			{
++				dhcp6_clear_list(&ialist);
++				return -1;
++			}
++			else if (retval)
++			{
+ 				found++;
++			}
+ 		}
+ 	}
+ 	if (found == 0) {
+@@ -3035,6 +3109,53 @@
+ 	return (matched);
+ }
+ 
++//brcm begin
++struct dhcp6_if *
++find_ifconfbypoolname(poolname)
++	char *poolname;
++{
++	struct dhcp6_if *ifp;
++
++	for (ifp = dhcp6_if; ifp; ifp = ifp->next) {
++		if (strcmp(ifp->pool.name, poolname) == 0)
++			return (ifp);
++	}
++
++	return (NULL);
++}
++
++/*to support multiple global address*/
++static int check_ia_match(ifpname , addr)
++	const char *ifpname; 
++	const struct in6_addr *addr;
++{
++   FILE *fp;
++   char line[BUFLEN_64];
++   char addrstr[BUFLEN_32];
++
++   if ((fp = fopen("/proc/net/if_inet6", "r")) == NULL)
++   {
++      return -1;
++   }
++
++   sprintf(addrstr, "%08x%08x%08x%08x\n",
++		   ntohl(addr->s6_addr32[0]),ntohl(addr->s6_addr32[1]),
++		   ntohl(addr->s6_addr32[2]),ntohl(addr->s6_addr32[3]));
++
++   while (fgets(line, sizeof(line), fp) != NULL)
++   {
++      if ((strncmp(line, addrstr, 16) == 0) && (strstr(line, ifpname) != NULL))
++      {
++         fclose(fp);
++         return 0;
++      }
++   }
++
++   fclose(fp);
++   return -1;
++} 
++//brcm end
++
+ /* making sublist of iana */
+ static int
+ make_iana_from_pool(poolspec, spec, retlist)
+@@ -3054,12 +3175,33 @@
+ 	}
+ 
+ 	if (spec) {
+-		memcpy(&saddr.addr, &spec->val_statefuladdr6.addr, sizeof(saddr.addr));
+-		if (is_available_in_pool(pool, &saddr.addr)) {
+-			found = 1;
++//brcm
++		struct dhcp6_if *ifp;
++		struct in6_addr *confaddr = &spec->val_statefuladdr6.addr;
++
++		ifp = find_ifconfbypoolname(poolspec->name);
++
++		/* brcm: assume prefix is 64   FIXME */
++		if (check_ia_match(ifp->ifname, confaddr) != 0)
++		{
++			dprintf(LOG_ERR, FNAME,"%s does not seem to belong to %s's link",
++					in6addr2str(confaddr, 0), ifp->ifname);
++			return -1;
++		}
++		else
++		{
++			memcpy(&saddr.addr, &spec->val_statefuladdr6.addr, 
++					sizeof(saddr.addr));
++			if (is_available_in_pool(pool, &saddr.addr)) 
++			{
++				found = 1;
++			}
+ 		}
+-	} else {
+-		if (get_free_address_from_pool(pool, &saddr.addr)) {
++	}
++	else 
++	{
++		if (get_free_address_from_pool(pool, &saddr.addr)) 
++		{
+ 			found = 1;
+ 		}
+ 	}
+diff -urN wide-dhcpv6-20080615-coverity/Makefile.in dhcpv6/Makefile.in
+--- wide-dhcpv6-20080615-coverity/Makefile.in	2007-03-21 17:52:58.000000000 +0800
++++ dhcpv6/Makefile.in	2022-08-09 18:11:57.673491988 +0800
+@@ -33,8 +33,6 @@
+ srcdir=	@srcdir@
+ sysconfdir= @sysconfdir@
+ localdbdir= @localdbdir@
+-user= @user@
+-group= @group@
+ 
+ CFLAGS=	@CFLAGS@ @DEFS@ -DSYSCONFDIR=\"${sysconfdir}\" \
+ 	-DLOCALDBDIR=\"${localdbdir}\"
+@@ -86,9 +84,9 @@
+ getnameinfo.o:	$(srcdir)/missing/getnameinfo.c
+ 	$(CC) -c $(srcdir)/missing/$*.c
+ strlcat.o:	$(srcdir)/missing/strlcat.c
+-	$(CC) -c $(srcdir)/missing/$*.c
++	$(CC) $(CFLAGS) -c $(srcdir)/missing/$*.c
+ strlcpy.o:	$(srcdir)/missing/strlcpy.c
+-	$(CC) -c $(srcdir)/missing/$*.c
++	$(CC) $(CFLAGS) -c $(srcdir)/missing/$*.c
+ arc4random.o:	$(srcdir)/missing/arc4random.c
+ 	$(CC) $(CFLAGS) -c $(srcdir)/missing/$*.c
+ getifaddrs.o:	$(srcdir)/missing/getifaddrs.c
+@@ -103,13 +101,21 @@
+ 
+ install::
+ 	-mkdir -p $(sbindir) $(mandir)/man5 $(mandir)/man8
+-	$(INSTALL_PROGRAM) -s -o $(user) -g $(group) $(TARGET) $(sbindir)
+-	$(INSTALL_DATA) -o $(user) -g $(group) dhcp6c.8 $(mandir)/man8
+-	$(INSTALL_DATA) -o $(user) -g $(group) dhcp6s.8 $(mandir)/man8
+-	$(INSTALL_DATA) -o $(user) -g $(group) dhcp6relay.8 $(mandir)/man8
+-	$(INSTALL_DATA) -o $(user) -g $(group) dhcp6ctl.8 $(mandir)/man8
+-	$(INSTALL_DATA) -o $(user) -g $(group) dhcp6c.conf.5 $(mandir)/man5
+-	$(INSTALL_DATA) -o $(user) -g $(group) dhcp6s.conf.5 $(mandir)/man5
++	$(INSTALL_PROGRAM) $(TARGET) $(sbindir)
++	$(INSTALL_DATA) dhcp6c.8 $(mandir)/man8
++	$(INSTALL_DATA) dhcp6s.8 $(mandir)/man8
++	$(INSTALL_DATA) dhcp6relay.8 $(mandir)/man8
++	$(INSTALL_DATA) dhcp6ctl.8 $(mandir)/man8
++	$(INSTALL_DATA) dhcp6c.conf.5 $(mandir)/man5
++	$(INSTALL_DATA) dhcp6s.conf.5 $(mandir)/man5
++
++uninstall:: distclean
++	/bin/rm -f $(mandir)/man5/dhcp6*.conf.5 $(mandir)/man8/dhcp6*.8
++	for exe in $(TARGET); do /bin/rm -f $(sbindir)/$${exe}; done
++	-rmdir --ignore-fail-on-non-empty $(mandir)/man5
++	-rmdir --ignore-fail-on-non-empty $(mandir)/man8
++	-rmdir --ignore-fail-on-non-empty $(mandir)
++	-rmdir --ignore-fail-on-non-empty $(sbindir)
+ 
+ includes::
+ 
+diff -urN wide-dhcpv6-20080615-coverity/prefixconf.c dhcpv6/prefixconf.c
+--- wide-dhcpv6-20080615-coverity/prefixconf.c	2007-03-21 17:52:55.000000000 +0800
++++ dhcpv6/prefixconf.c	2022-08-09 18:11:57.673491988 +0800
+@@ -60,6 +60,10 @@
+ #include "dhcp6c_ia.h"
+ #include "prefixconf.h"
+ 
++// brcm
++#include "cms_msg.h"
++extern void *msgHandle;
++
+ TAILQ_HEAD(siteprefix_list, siteprefix);
+ struct iactl_pd {
+ 	struct iactl common;
+@@ -80,6 +84,7 @@
+ 	TAILQ_ENTRY (siteprefix) link;
+ 
+ 	struct dhcp6_prefix prefix;
++	struct dhcp6_prefix prefixOld; /* old previous to be aged out */
+ 	time_t updatetime;
+ 	struct dhcp6_timer *timer;
+ 	struct iactl_pd *ctl;
+@@ -110,7 +115,7 @@
+     struct dhcp6_eventdata **, struct dhcp6_eventdata *));
+ static void renew_data_free __P((struct dhcp6_eventdata *));
+ 
+-static struct dhcp6_timer *siteprefix_timo __P((void *));
++struct dhcp6_timer *siteprefix_timo __P((void *));
+ 
+ static int add_ifprefix __P((struct siteprefix *,
+     struct dhcp6_prefix *, struct prefix_ifconf *));
+@@ -118,6 +123,13 @@
+ extern struct dhcp6_timer *client6_timo __P((void *));
+ static int pd_ifaddrconf __P((ifaddrconf_cmd_t, struct dhcp6_ifprefix *ifpfx));
+ 
++//brcm
++static void sendPrefixEventMessage __P((ifaddrconf_cmd_t, struct siteprefix *));
++extern Dhcp6cStateChangedMsgBody dhcp6cMsgBody;
++extern struct dhcp6_timer *addr_timo __P((void *));
++extern LIST_HEAD(, dhcp6_timer) timer_head;
++struct dhcp6_prefix cookie;
++
+ int
+ update_prefix(ia, pinfo, pifc, dhcpifp, ctlp, callback)
+ 	struct ia *ia;
+@@ -178,6 +190,15 @@
+ 		memset(sp, 0, sizeof(*sp));
+ 		sp->prefix.addr = pinfo->addr;
+ 		sp->prefix.plen = pinfo->plen;
++		if (cookie.plen != 0) {
++			/*
++			 * old prefix followed by new prefix present in order in the Reply
++			 */
++			sp->prefixOld.vltime = cookie.vltime;
++			sp->prefixOld.addr = cookie.addr;
++			sp->prefixOld.plen = cookie.plen;
++			memset(&cookie, 0, sizeof(cookie));
++		}
+ 		sp->ctl = iac_pd;
+ 		TAILQ_INIT(&sp->ifprefix_list);
+ 
+@@ -189,6 +210,13 @@
+ 	/* update the timestamp of update */
+ 	sp->updatetime = time(NULL);
+ 
++	/* brcm: pass cdrouter dhcpv6_pd_62 */
++	if (pinfo->vltime == 0 && pinfo->pltime == 0 && !spcreate) {
++		cookie.vltime = sp->prefix.vltime;
++		cookie.addr = sp->prefix.addr;
++		cookie.plen = sp->prefix.plen;
++	}
++
+ 	/* update the prefix according to pinfo */
+ 	sp->prefix.pltime = pinfo->pltime;
+ 	sp->prefix.vltime = pinfo->vltime;
+@@ -226,7 +254,8 @@
+ 	switch (sp->prefix.vltime) {
+ 	case 0:
+ 		remove_siteprefix(sp);
+-		break;
++//		break;
++		return (0);    //brcm
+ 	case DHCP6_DURATION_INFINITE:
+ 		if (sp->timer)
+ 			dhcp6_remove_timer(&sp->timer);
+@@ -249,6 +278,9 @@
+ 		break;
+ 	}
+ 
++//brcm
++	sendPrefixEventMessage(IFADDRCONF_ADD, sp);
++
+ 	return (0);
+ }
+ 
+@@ -282,6 +314,9 @@
+ 	if (sp->timer)
+ 		dhcp6_remove_timer(&sp->timer);
+ 
++//brcm
++	sendPrefixEventMessage(IFADDRCONF_REMOVE, sp);
++
+ 	/* remove all interface prefixes */
+ 	while ((ip = TAILQ_FIRST(&sp->ifprefix_list)) != NULL) {
+ 		TAILQ_REMOVE(&sp->ifprefix_list, ip, plink);
+@@ -401,13 +436,14 @@
+ 	free(ial);
+ }
+ 
+-static struct dhcp6_timer *
++struct dhcp6_timer *
+ siteprefix_timo(arg)
+ 	void *arg;
+ {
+ 	struct siteprefix *sp = (struct siteprefix *)arg;
+ 	struct ia *ia;
+ 	void (*callback)__P((struct ia *));
++	struct dhcp6_timer *tm, *tm_next;
+ 
+ 	dprintf(LOG_DEBUG, FNAME, "prefix timeout for %s/%d",
+ 	    in6addr2str(&sp->prefix.addr, 0), sp->prefix.plen);
+@@ -420,6 +456,16 @@
+ 
+ 	remove_siteprefix(sp);
+ 
++	sendDhcp6cEventMessage();    
++	for (tm = LIST_FIRST(&timer_head); tm; tm = tm_next) {
++		tm_next = LIST_NEXT(tm, link);
++
++		/* brcm: pass cdrouter dhcpv6_4 */
++		if (tm->expire == addr_timo) {
++			ia->no6cRestart = 1;
++			break;
++		}
++	}
+ 	(*callback)(ia);
+ 
+ 	return (NULL);
+@@ -451,6 +497,10 @@
+ 	ifpfx->paddr.sin6_len = sizeof(struct sockaddr_in6);
+ #endif
+ 	ifpfx->paddr.sin6_addr = prefix->addr;
++
++	/* brcm: FIXME: Find out how ISP will deploy site local prefix configuration */
++	pconf->sla_len = pconf->ifid_len - prefix->plen;
++
+ 	ifpfx->plen = prefix->plen + pconf->sla_len;
+ 	/*
+ 	 * XXX: our current implementation assumes ifid len is a multiple of 8
+@@ -515,3 +565,22 @@
+ 	return (ifaddrconf(cmd, pconf->ifname, &ifpfx->ifaddr, ifpfx->plen, 
+ 	    ND6_INFINITE_LIFETIME, ND6_INFINITE_LIFETIME));
+ }
++
++//brcm
++inline void sendPrefixEventMessage(ifaddrconf_cmd_t cmd, struct siteprefix *sp)
++{
++	dhcp6cMsgBody.prefixAssigned = TRUE;
++	dhcp6cMsgBody.prefixCmd      = cmd;
++	sprintf(dhcp6cMsgBody.sitePrefix, "%s/%d", in6addr2str(&sp->prefix.addr, 0), sp->prefix.plen);
++	dhcp6cMsgBody.prefixPltime = sp->prefix.pltime;
++	dhcp6cMsgBody.prefixVltime = sp->prefix.vltime;
++	if (sp->prefixOld.plen != 0)
++	{
++		sprintf(dhcp6cMsgBody.sitePrefixOld, "%s/%d", in6addr2str(&sp->prefixOld.addr, 0), sp->prefixOld.plen);
++		dhcp6cMsgBody.prefixVltimeOld = sp->prefixOld.vltime;
++	}
++
++	dprintf(LOG_NOTICE, FNAME, "DHCP6C_PREFIX_CHANGED");
++	return;
++}  /* End of sendPrefixEventMessage() */
++

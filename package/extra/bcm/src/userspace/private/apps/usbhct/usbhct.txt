@@ -1,0 +1,64 @@
+﻿-----------------------------------------------------------------------
+			USB Host Controller Test Software
+-----------------------------------------------------------------------
+
+The Linux based USB Host Controller Test (USBHCT) software works on ARM based Broadcom Set-top box (STB), DSL/PON and CM ICs with an integrated USB XHCI core.  This software is included in the Linux Root File System.
+
+-----
+Usage
+-----
+
+Command line options:
+    --drp=D
+           - Wait for 'D' seconds for removal of port identification device (default=60)
+
+    --crd=D
+           - delay for 'D' seconds with USB restart during compliance setup (default=1)
+           - increase if following message is seen:
+           - "Error opening device file again: No such file or directory"
+
+     -d=hhhh
+           - debug options in hex:
+           - 0001 = show device port info
+           - 0002 = show device descriptor for 'G' command
+           - 0010 = show command line parameters
+           - 0020 = show other startup debug info
+           - 0100 = show USB devices file scan...input line
+           - 0200 =                           ...parsed line
+           - 0400 =                           ...parse types
+           - 1000 = show all kernel messages
+           - 4000 = show USB control message
+
+==========================
+USB 2.0 - High Speed (HS):
+==========================
+The software displays the following menu which offers choices most of which are typically required for the USB-IF electrical characterization of HS devices. The main test mode choices are similar to what is offered in the Windows USB-IF test program USBHSET. A HS device must be connected to identify the port under test. A prompt will be issued to disconnect the HS device (within 60 seconds) before the test mode is set up.
+- Test J-State
+- Test K-State
+- Test SE0-NAK
+- Test Packet
+- Suspend a port
+- Resume a port that was suspended previously
+- Reset a port
+- Get Device Descriptor
+- Set Config
+
+NOTE: The menu options are case-sensitive.
+
+==========================
+USB 1.1 - Full speed (FS):
+==========================
+The SOFs that are generated when a FS device is connected can be used to obtain the FS eye diagram.
+
+==========================
+USB 1.1 - Low speed (LS):
+==========================
+The HID polling packets that are generated when a LS device is connected can be used to obtain the LS eye diagram. If that doesn't work, the "Get Device Descriptor" or "Set Config" can be used to generate a packet.
+
+==========================
+USB 3.1+ - Superspeed (SS)
+==========================
+"Enable USB 3.1+ Link Compliance mode" option will be displayed if a USB 3.0 controller with ports is detected. An SS device must be connected to identify the port under test. A prompt will be issued to disconnect the SS device (within 60 seconds) before the test mode is enabled. Note that the port will only go into compliance mode when the first LFPS timeout occurs. i.e. when test equipment is connected via test adapter.
+After this mode is enabled, a 'V' option is available to verify whether the port entered compliance mode or not.
+
+

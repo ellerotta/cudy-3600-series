@@ -1,0 +1,73 @@
+#! /bin/sh
+
+usage()
+{
+    echo "Usage: fw_printenv [OPTIONS]... [VARIABLE]..."
+    echo "Print variables from U-Boot environment"
+    echo ""
+    echo " -h, --help           print this help."
+    echo " -n, --noheader       do not repeat variable name in output"
+    echo ""
+}
+
+dump_all()
+{
+    local var
+    local var_file
+    local value
+
+    for var_file in /proc/environment/*
+    do
+	var=$(basename $var_file)
+
+	# filter out raw as that is binary data copy of environment
+	[ "$var" = "raw" ] && continue
+
+	value=$(cat $var_file)
+	
+	# bug workaround
+	# filter out empty content as that variable should not exist as it's not stored
+	[ -z "$value" ] && continue
+
+	# real data print it
+	echo $var=$value
+    done
+    
+    exit 0    
+}
+
+no_header=0	# Should the variable name be stripped out in the printout
+
+while getopts "hn" opt; do
+    case $opt in
+	n)
+	    no_header=1
+	    ;;
+	h)
+	    usage
+	    exit 0
+	    ;;
+    esac
+done
+shift $((OPTIND -1))
+
+# no variable given just dump whole environment
+[ "$#" -eq 0 ] && dump_all
+
+# read out data
+if ! value=$(cat /proc/environment/$1 2>/dev/null)
+then
+    echo "## Error: \"$1\" not defined" >&2
+    exit 1
+fi
+
+# print with var(header) includede or not
+if [ $no_header -eq 1 ]
+then
+    echo "$value"
+else
+    echo "$1=$value"
+fi
+
+exit 0
+

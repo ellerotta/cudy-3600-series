@@ -1,0 +1,13 @@
+diff --git Makefile.in Makefile.in
+index 38059a2..1949422 100644
+--- Makefile.in
++++ Makefile.in
+@@ -2631,7 +2631,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-libLTLIBRARIES \
+ @CODE_COVERAGE_RULES@
+ 
+ @BUILD_COMPILER_TRUE@protobuf-c/protobuf-c.pb.cc protobuf-c/protobuf-c.pb.h: @PROTOC@ $(top_srcdir)/protobuf-c/protobuf-c.proto
+-@BUILD_COMPILER_TRUE@	$(AM_V_GEN)@PROTOC@ -I$(top_srcdir) --cpp_out=$(top_builddir) $(top_srcdir)/protobuf-c/protobuf-c.proto
++@BUILD_COMPILER_TRUE@	$(AM_V_GEN)@PROTOC@ -I$(includedir) -I$(top_srcdir) --cpp_out=$(top_builddir) $(top_srcdir)/protobuf-c/protobuf-c.proto
+ #
+ # protoc-c compat link
+ #

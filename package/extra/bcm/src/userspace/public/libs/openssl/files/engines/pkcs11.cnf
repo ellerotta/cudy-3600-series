@@ -1,0 +1,7 @@
+# Engine used with OPTEE SecureOS
+[pkcs11]
+engine_id = pkcs11
+dynamic_path = /lib/pkcs11.so
+MODULE_PATH = /lib/libckteec.so
+init = 0
+

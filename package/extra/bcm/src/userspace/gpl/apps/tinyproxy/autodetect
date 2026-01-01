@@ -1,0 +1,2 @@
+condition: ifeq ($(BUILD_TINYPROXY),y)
+dependson:  public/libs/mnl public/libs/openssl

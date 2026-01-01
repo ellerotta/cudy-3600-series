@@ -1,0 +1,33 @@
+OBJS := wde_mdm2json.o wde_access.o tables.o 
+
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+# These are public API headers needed by other apps which want to call this lib.
+# Private/internal headers should not be listed here.
+HEADERS := wde_mdm2json.h
+
+all: $(LIB)
+	mkdir -p $(HEADER_INSTALL_DIR)
+	install -p -m 444 -t $(HEADER_INSTALL_DIR) $(addprefix $(mdir)/,$(HEADERS))
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive \
+		$(BCM_LIB_PATH) -lxml2
+
+
+clean:
+	rm -f *.o *.d $(LIB)
+	rm -f $(LIB_INSTALL_DIR)/$(LIB)
+	rm -f $(addprefix $(HEADER_INSTALL_DIR)/,$(HEADERS))
+
+binaryonly_prepare:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

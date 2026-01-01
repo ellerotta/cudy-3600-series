@@ -1,0 +1,105 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Controller Trust Role Configuration</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'ctrolecfg.cgi?';
+
+        // Enable Controller Trust Role
+        if (document.getElementById('enable-1').checked)
+          val += '1,';
+        else
+          val += '0,';
+        if (uspAction == 'edit') {
+          // Alias
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split(',');
+            val += info[1] + ',';
+          }else {
+            // Empty Alias
+            val += ',';
+          }
+        } else {
+          // Empty Alias
+          val += ',';
+        }
+        // Name
+        val += document.getElementById('name').value;
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function bodyLoad() {
+        var editrole = document.getElementById('editctrole');
+        var addtrole = document.getElementById('addctrole');
+
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split(',');
+            // Enable Controller Trust Role
+            if (info[0] == 'Yes')
+              document.getElementById('enable-1').checked = true;
+            else
+              document.getElementById('enable-0').checked = true;
+            // Alias
+            document.getElementById('alias').value = info[1];
+            // Name
+            document.getElementById('name').value = info[2];
+            // Disable name
+            document.getElementById('name').disabled = true;
+          }
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          // Disable Controller Trust Role by default
+          document.getElementById('enable-0').checked = true;
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>Controller Trust Role Configuration</h3>
+    Name must be unique and not conflict with any existing role name. <br><br>
+    <div id='ctrole'><center>
+      <table id='tblctrole' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd'>Enable Role</td>
+            <td><input name='enable' id='enable-0' type='radio'>  No</td>
+            <td><input name='enable' id='enable-1' type='radio'>  Yes</td>
+          </tr>
+          <tr>
+            <td class='hd'>Alias</td>
+            <td colspan='2'><input type='text' id='alias' disabled></td>
+          </tr>
+          <tr>
+            <td class='hd'>Name</td>
+            <td colspan='2'><input type='text' id='name'></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+  </form>
+  </body>
+</html>

@@ -1,0 +1,70 @@
+--- orig_ethtool-6.1/internal.h	2022-12-16 18:00:26.000000000 +0800
++++ ethtool-6.1/internal.h	2022-12-23 15:55:10.588177904 +0800
+@@ -24,7 +24,7 @@
+ #define __UAPI_DEF_IF_IFNAMSIZ	1
+ #define __UAPI_DEF_IF_IFMAP	1
+ #define __UAPI_DEF_IF_IFREQ	1
+-#include <linux/if.h>
++#include <net/if.h>
+ 
+ #include "json_writer.h"
+ #include "json_print.h"
+@@ -42,6 +42,12 @@
+ typedef uint8_t u8;
+ typedef int32_t s32;
+ 
++/* ethtool.h epxects __KERNEL_DIV_ROUND_UP to be defined by <linux/kernel.h> */
++#include <linux/kernel.h>
++#ifndef __KERNEL_DIV_ROUND_UP
++#define __KERNEL_DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
++#endif
++
+ #include <linux/ethtool.h>
+ #include <linux/net_tstamp.h>
+ 
+--- orig_ethtool-6.1/ethtool.c	2022-12-16 18:00:26.000000000 +0800
++++ ethtool-6.1/ethtool.c	2022-12-23 16:00:14.336007141 +0800
+@@ -31,7 +31,6 @@
+ 
+ #include "internal.h"
+ #include <string.h>
+-#include <strings.h>
+ #include <stdlib.h>
+ #include <sys/stat.h>
+ #include <stdio.h>
+@@ -47,7 +46,6 @@
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ 
+-#include <linux/ioctl.h>
+ #include <linux/sockios.h>
+ #include <linux/netlink.h>
+ 
+@@ -303,7 +301,7 @@ static void parse_generic_cmdline(struct
+ 				case CMDL_IP4: {
+ 					u32 *p = info[idx].wanted_val;
+ 					struct in_addr in;
+-					if (!inet_pton(AF_INET, argp[i], &in))
++					if (!inet_aton(argp[i], &in))
+ 						exit_bad_args();
+ 					*p = in.s_addr;
+ 					break;
+--- orig_ethtool-6.1/Makefile.am	2022-12-16 18:00:26.000000000 +0800
++++ ethtool-6.1/Makefile.am	2022-12-23 15:59:18.643305091 +0800
+@@ -1,4 +1,4 @@
+-AM_CFLAGS = -Wall -Wextra -D_POSIX_C_SOURCE=200809L
++AM_CFLAGS = -Wall -Wextra
+ AM_CPPFLAGS = -I$(top_srcdir)/uapi
+ LDADD = -lm
+ 
+--- orig_ethtool-6.1/Makefile.in	2022-12-20 06:15:07.000000000 +0800
++++ ethtool-6.1/Makefile.in	2022-12-23 16:05:35.396029707 +0800
+@@ -820,7 +820,7 @@ target_alias = @target_alias@
+ top_build_prefix = @top_build_prefix@
+ top_builddir = @top_builddir@
+ top_srcdir = @top_srcdir@
+-AM_CFLAGS = -Wall -Wextra -D_POSIX_C_SOURCE=200809L
++AM_CFLAGS = -Wall -Wextra
+ AM_CPPFLAGS = -I$(top_srcdir)/uapi $(am__append_3)
+ LDADD = -lm $(am__append_4)
+ man_MANS = ethtool.8

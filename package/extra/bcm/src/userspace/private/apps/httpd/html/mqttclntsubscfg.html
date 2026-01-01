@@ -1,0 +1,145 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>MQTT Client Subscription Configuration</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'mqttclntsubscfg.cgi?';
+
+        // validate input
+        if (document.getElementById('clntAlias').value == '') {
+          alert('MQTT client alias cannot be empty.');
+          return;
+        }
+
+        // MQTT Client Alias and Subscription Alias
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            val += info[0] + '|' + info[1] +'|';
+          } else
+            val += '||';
+        } else {
+          // MQTT Client Alias
+          val +=  document.getElementById('clntAlias').value + '|';
+          // MTP Client SubscriptionAlias
+          val +=  '|';
+        }
+
+        // Enable MQTT Client Subscription
+        if (document.getElementById('enable-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+
+        // Topic
+        val += document.getElementById('topic').value + '|';
+        // QoS
+        val += document.getElementById('qos').value;
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function bodyLoad() {
+        var clnt = document.getElementById('clntAlias');
+        var subs = document.getElementById('subsAlias');
+
+        if (uspAction == 'edit') {
+          // MQTT Client Alias
+          clnt.disabled = true;
+          // MQTT Client Subscription Alias
+          subs.disabled = true;
+
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+
+            // MQTT Client Alias
+            clnt.value = info[0];
+            // MQTT Client Subscription Alias
+            subs.value = info[1];
+            // Enable 
+            if (info[2] == 'Yes')
+              document.getElementById('enable-1').checked = true;
+            else
+              document.getElementById('enable-0').checked = true;
+            // Topic
+            document.getElementById('topic').value = info[3];
+            // QoS
+            document.getElementById('qos').value = info[4];
+          }
+
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          // MQTT Client Alias
+          clnt.disabled = false;
+          // MQTT Client Subscription Alias
+          subs.disabled = true;
+
+          // Enable
+          document.getElementById('enable-0').checked = true;
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>MQTT Client Subscription Configuration</h3><br>
+    <div id='mqttClntSubs'><center>
+      <table id='tblMqttClntSubsCfg' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd'>Client Name</td>
+            <td colspan='2'>
+				<select id='clntAlias'>
+                  <option value=''></option>
+<%ejGetOther(uspGetMqttClientNameList)%>
+                </select>
+            </td>
+          </tr>
+          <tr>
+            <td class='hd'>Subscription Alias</td>
+            <td colspan='2'><input type='text' id='subsAlias'></td>
+          </tr>
+          <tr height='25'>
+          </tr>
+          <tr>
+            <td class='hd'>Enable Subscription</td>
+            <td><input name='enable' id='enable-0' type='radio'>  Disable</td>
+            <td><input name='enable' id='enable-1' type='radio'>  Enable</td>
+          </tr>
+          <tr height='25'>
+          </tr>
+          <tr>
+            <td class='hd'>Topic</td>
+            <td colspan='2'><input type='text' id='topic'></td>
+          </tr>
+          <tr>
+            <td class='hd'>QoS [0-2]</td>
+            <td colspan='2'><input type='text' id='qos'></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+  </form>
+  </body>
+</html>

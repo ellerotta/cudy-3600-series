@@ -1,0 +1,23 @@
+--- configure	2022-12-29 12:13:47.858265725 +0800
++++ configure.new	2022-12-29 11:43:44.280673096 +0800
+@@ -235,6 +235,7 @@
+ 
+ 	echo 'CFLAGS += -DHAVE_ELF' `${PKG_CONFIG} libelf --cflags` >> $CONFIG
+ 	echo 'LDLIBS += ' `${PKG_CONFIG} libelf --libs` >>$CONFIG
++    	echo 'LDLIBS += ' `${PKG_CONFIG} zlib --libs` >>$CONFIG
+     else
+ 	echo "no"
+     fi
+@@ -386,9 +387,9 @@
+ #echo -n "SELinux support: "
+ #check_selinux
+ 
+-# brcm: no ELF
+-#echo -n "ELF support: "
+-#check_elf
++# brcm: check ELF for eBPF
++echo -n "ELF support: "
++check_elf
+ 
+ # brcm: no libmnl
+ #echo -n "libmnl support: "

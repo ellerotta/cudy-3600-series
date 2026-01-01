@@ -1,0 +1,9 @@
+#
+# This file contains EID info for the audio md
+#
+
+BEGIN
+  eid         = EID_AUDIO_MD
+  name        = audio_md
+  flags       = EIF_MESSAGING_CAPABLE
+END

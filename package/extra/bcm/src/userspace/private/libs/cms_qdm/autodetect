@@ -1,0 +1,2 @@
+dependson: public/libs/cms_util public/libs/cms_msg private/libs/omcisdk private/libs/mdm_cbk_customer private/libs/mdm_cbk_core private/libs/mdm_cbk_sysmgmt private/libs/mdm_cbk_diag private/libs/mdm_cbk_devinfo private/libs/mdm_cbk_dsl private/libs/mdm_cbk_voice private/libs/mdm_cbk_wifi private/libs/mdm_cbk_openplat private/libs/mdm_cbk_tr69 private/libs/mdm_cbk_usp private/libs/mdm_cbk_gpon private/libs/mdm_cbk_epon private/libs/wlcsm
+

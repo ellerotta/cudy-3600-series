@@ -1,0 +1,11 @@
+The elfutils-0.187.tar.bz2 is the unmodified tarball from https://sourceware.org/elfutils/.
+
+The license is:
+The libraries and backends are dual GPLv2+/LGPLv3+. The utilities are GPLv3+.
+
+We only build and install the libraries.  We do not build the GPLv3 utilities.
+(DO NOT BUILD the utilities!  We do not want to be entanged by GPLv3).
+
+The only apps that use libelf are public/apps/minicoredumper and gpl/apps/iproute2,
+so using GPLv2 libs should be ok.
+

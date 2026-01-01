@@ -1,0 +1,2705 @@
+--- ori_ppp-2.5.0/include/linux/ppp_defs.h      2020-12-29 12:34:43.000000000 +0800
++++ ppp-2.5.0/include/linux/ppp_defs.h  2023-09-14 13:16:46.549549577 +0800
+@@ -46,10 +46,16 @@
+  *     file.  Don't change the format of that line otherwise, so the
+  *     installation script can recognize it.
+  */
+-
+ #ifndef _PPP_DEFS_H_
+ #define _PPP_DEFS_H_
+-
++#include <stdint.h>
++#include <sys/types.h>
++#ifndef __u8
++typedef uint8_t __u8;
++#endif
++#ifndef __u32
++typedef uint32_t __u32;
++#endif
+ /*
+  * The basic PPP frame.
+  */
+
+//////////////// pppoatm part ///////////////////
+--- ori_ppp-2.5.0/pppd/plugins/pppoatm/pppoatm.c	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/plugins/pppoatm/pppoatm.c	2023-04-12 15:18:26.550382725 +0800
+@@ -19,6 +19,7 @@
+ #include <stdlib.h>
+ #include <atm.h>
+ #include <linux/atmdev.h>
++#include <linux/bcm_atmdev.h>
+ #include <linux/atmppp.h>
+ #include <sys/stat.h>
+ #include <net/if.h>
+@@ -45,6 +46,7 @@
+ struct channel pppoa_channel;
+ static int pppoa_fd = -1;
+ static char devnam[MAXNAMELEN];
++extern int  isPppoa;  /* set in options.c */
+ 
+ static struct option pppoa_options[] = {
+ 	{ "device name", o_wild, (void *) &setdevname_pppoatm,
+@@ -76,16 +78,21 @@
+ static int setdevname_pppoatm(const char *cp, const char **argv, int doit)
+ {
+ 	struct sockaddr_atmpvc addr;
++	char *pvc;
+ 	extern struct stat devstat;
+ 
+ 	if (device_got_set)
+ 		return 0;
+-
++	//info("PPPoATM setdevname_pppoatm: '%s'", cp);
+ 	memset(&addr, 0, sizeof addr);
+-	if (text2atm(cp, (struct sockaddr *) &addr, sizeof(addr),
+-	    T2A_PVC | T2A_NAME | T2A_WILDCARD) < 0) {
+-		if (doit)
+-			info("cannot parse the ATM address: %s", cp);
++
++	if ((pvc = strchr(cp, '.')) == NULL)
++		return 0;
++	
++	if (text2atm(pvc+1, (struct sockaddr *) &addr, sizeof(addr), T2A_PVC | T2A_NAME) < 0) 
++	{
++		if(doit)
++			info("atm does not recognize: %s", cp);
+ 		return 0;
+ 	}
+ 	if (!doit)
+@@ -103,7 +110,9 @@
+ 		lcp_allowoptions[0].neg_asyncmap = 0;
+ 		lcp_wantoptions[0].neg_pcompression = 0;
+ 	}
++	info("PPPoATM setdevname_pppoatm - SUCCESS:%s", cp);
+ 	device_got_set = 1;
++	isPppoa = 1;
+ 	return 1;
+ }
+ 
+@@ -117,8 +126,7 @@
+ static void set_line_discipline_pppoatm(int fd)
+ {
+ 	struct atm_backend_ppp be;
+-
+-	be.backend_num = ATM_BACKEND_PPP;
++	be.backend_num = ATM_BACKEND_PPP_BCM;
+ 	if (!llc_encaps)
+ 		be.encaps = PPPOATM_ENCAPS_VC;
+ 	else if (!vc_encaps)
+@@ -174,7 +182,15 @@
+ 
+ static void disconnect_pppoatm(void)
+ {
+-	close(pppoa_fd);
++	//close(pppoa_fd);
++    if (pppoa_fd > 0) {
++        struct atm_backend_ppp be;
++        be.backend_num = ATM_BACKEND_PPP_BCM_CLOSE_DEV;
++        if (ioctl(pppoa_fd, ATM_SETBACKEND, &be) < 0)
++           fatal("ioctl(ATM_SETBACKEND): %m");
++        close(pppoa_fd);
++        pppoa_fd= -1;
++    }	
+ }
+ 
+ void plugin_init(void)
+@@ -187,6 +203,7 @@
+ #else
+ 	fatal("No PPPoATM support on this OS");
+ #endif
++	info("PPPoATM plugin_init");
+ 	ppp_add_options(pppoa_options);
+ }
+
+//////////////// pppol2tp part ///////////////////
+--- ori_ppp-2.5.0/pppd/plugins/pppol2tp/pppol2tp.c	2022-12-30 09:12:39.000000000 +0800
++++ ppp-2.5.0/pppd/plugins/pppol2tp/pppol2tp.c	2023-04-14 11:56:45.433650931 +0800
+@@ -183,6 +183,8 @@
+ 
+ 	the_channel = &pppol2tp_channel;
+ 	device_got_set = 1;
++	
++	isPppL2tp = 1;
+ 
+ 	return 1;
+ }
+@@ -270,9 +272,12 @@
+ 			       &on, sizeof(on)) < 0)
+ 			fatal("setsockopt(PPPOL2TP_SENDSEQ): %m");
+ 	if (pppol2tp_lns_mode)
++	{
++		use_xl2tpd_secrets_path = 1;	//declaration in pppd.h, definition in pppd/main.c 
+ 		if (setsockopt(pppol2tp_fd, SOL_PPPOL2TP, PPPOL2TP_SO_LNSMODE,
+ 			       &on, sizeof(on)) < 0)
+ 			fatal("setsockopt(PPPOL2TP_LNSMODE): %m");
++	}
+ 	if (pppol2tp_reorder_timeout)
+ 		if (setsockopt(pppol2tp_fd, SOL_PPPOL2TP, PPPOL2TP_SO_REORDERTO,
+ 			       &pppol2tp_reorder_timeout,
+@@ -485,6 +490,8 @@
+ 
+ 		snoop_recv_hook = pppol2tp_lcp_snoop_recv;
+ 		snoop_send_hook = pppol2tp_lcp_snoop_send;
++		use_xl2tpd_secrets_path = 1;	//declaration in pppd.h, definition in pppd/main.c 
++		
+ 	}
+ }
+
+//////////////// pppoe part ///////////////////
+--- ori_ppp-2.5.0/pppd/plugins/pppoe/discovery.c	2022-12-30 09:12:39.000000000 +0800
++++ ppp-2.5.0/pppd/plugins/pppoe/discovery.c	2023-04-14 10:14:49.073926096 +0800
+@@ -44,6 +44,8 @@
+ 
+ #include <signal.h>
+ 
++#define PLUGIN /* use ppp_signaled/ppp_get_time functions from pppd/main.c */
++
+ #ifdef PLUGIN
+ #define signaled(x) ppp_signaled(x)
+ #define get_time(x) ppp_get_time(x)
+@@ -366,6 +368,10 @@
+     packet.length = htons(plen);
+ 
+     sendPacket(conn, conn->discoverySocket, &packet, (int) (plen + HDR_SIZE));
++
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    create_msg(BCM_PPPOE_CLIENT_STATE_PADO, CMSVS_ERROR_NONE);
++#endif
+ }
+ 
+ /**********************************************************************
+@@ -416,7 +422,8 @@
+ 		if (r >= 0 || errno != EINTR || signaled(SIGTERM)) break;
+ 	    }
+ 	    if (r < 0) {
+-		error("select (waitForPADO): %m");
++            if(errno != EINTR)
++		        error("select (waitForPADO): %m");
+ 		return;
+ 	    }
+ 	    if (r == 0)
+@@ -478,6 +485,9 @@
+ 	    if (pc.acNameOK && pc.serviceNameOK && conn->discoveryState != STATE_RECEIVED_PADO) {
+ 		memcpy(conn->peerEth, packet.ethHdr.h_source, ETH_ALEN);
+ 		conn->discoveryState = STATE_RECEIVED_PADO;
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++		create_msg(BCM_PPPOE_CLIENT_STATE_PADS, CMSVS_ERROR_NONE);
++#endif
+ 	    }
+ 	}
+     } while (pppoe_verbose >= 1 || conn->discoveryState != STATE_RECEIVED_PADO);
+@@ -650,12 +660,18 @@
+     /* Don't bother with ntohs; we'll just end up converting it back... */
+     conn->session = packet.session;
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    create_msg(BCM_PPPOE_CLIENT_STATE_CONFIRMED, CMSVS_ERROR_NONE);
++#endif
+     info("PPP session is %d", (int) ntohs(conn->session));
+ 
+     /* RFC 2516 says session id MUST NOT be zero or 0xFFFF */
+     if (ntohs(conn->session) == 0 || ntohs(conn->session) == 0xFFFF) {
+ 	error("Access concentrator used a session value of %x -- the AC is violating RFC 2516", (unsigned int) ntohs(conn->session));
+     }
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    save_session_info(conn->peerEth, (int)conn->session);
++#endif
+ }
+ 
+ /**********************************************************************
+@@ -727,8 +743,6 @@
+     }
+ 
+     /* We're done. */
+-    close(conn->discoverySocket);
+-    conn->discoverySocket = -1;
+     conn->discoveryState = STATE_SESSION;
+     return;
+ }
+
+
+--- ori_ppp-2.5.0/pppd/plugins/pppoe/if.c	2022-12-30 09:12:39.000000000 +0800
++++ ppp-2.5.0/pppd/plugins/pppoe/if.c	2023-04-12 15:47:41.016124586 +0800
+@@ -237,7 +237,8 @@
+ receivePacket(int sock, PPPoEPacket *pkt, int *size)
+ {
+     if ((*size = recv(sock, pkt, sizeof(PPPoEPacket), 0)) < 0) {
+-	error("error receiving pppoe packet: %m");
++	    if(errno != ENETDOWN)
++	        error("error receiving pppoe packet: %m");
+ 	return -1;
+     }
+     if (debug_on())
+
+
+--- ori_ppp-2.5.0/pppd/plugins/pppoe/plugin.c	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/plugins/pppoe/plugin.c	2023-09-07 10:35:21.683751192 +0800
+@@ -46,6 +46,8 @@
+ #include <signal.h>
+ #include <net/if_arp.h>
+ #include <linux/ppp_defs.h>
++#define _LINUX_IN_H
++#define _LINUX_IN6_H
+ #include <linux/if_pppox.h>
+ 
+ #include <pppd/pppd.h>
+@@ -196,7 +198,7 @@
+     }
+ 
+     conn->acName = acName;
+-    conn->serviceName = pppd_pppoe_service;
++    conn->serviceName = servicename = pppd_pppoe_service; //servicename: declaration in pppd.h, definition in pppd/main.c 
+     ppp_set_pppdevnam(devnam);
+     if (existingSession) {
+ 	unsigned int mac[ETH_ALEN];
+@@ -222,7 +224,7 @@
+ 	lcp_allowoptions[0].mru = conn->mtu;
+ 	lcp_wantoptions[0].mru = conn->mru;
+ 	if (conn->discoveryState != STATE_RECEIVED_PADO) {
+-	    error("Unable to complete PPPoE Discovery phase 1");
++	    //error("Unable to complete PPPoE Discovery phase 1");
+ 	    goto errout;
+ 	}
+ 	discovery2(conn);
+@@ -230,7 +232,7 @@
+ 	lcp_allowoptions[0].mru = conn->mtu;
+ 	lcp_wantoptions[0].mru = conn->mru;
+ 	if (conn->discoveryState != STATE_SESSION) {
+-	    error("Unable to complete PPPoE Discovery phase 2");
++	    //error("Unable to complete PPPoE Discovery phase 2");
+ 	    goto errout;
+ 	}
+     }
+@@ -313,6 +315,7 @@
+     if (conn->discoverySocket >= 0) {
+         sendPADT(conn, NULL);
+ 	close(conn->discoverySocket);
++	printf("PPP: Connection Terminated.\n");
+     }
+ }
+
+//////////////// pppd part ///////////////////
+--- ori_ppp-2.5.0/pppd/pathnames.h	2022-09-26 09:54:57.000000000 +0800
++++ ppp-2.5.0/pppd/pathnames.h	2023-04-14 14:50:31.880196936 +0800
+@@ -87,9 +87,18 @@
+ 
+ #define PPP_PATH_CONFDIR        SYSCONFDIR "/ppp"
+ 
+-#define PPP_PATH_UPAPFILE       PPP_PATH_CONFDIR "/pap-secrets"
+-#define PPP_PATH_CHAPFILE       PPP_PATH_CONFDIR "/chap-secrets"
+-#define PPP_PATH_SRPFILE        PPP_PATH_CONFDIR "/srp-secrets"
++#ifndef _ROOT_PATH
++#define _ROOT_PATH
++#endif
++
++#define PPP_PATH_UPAPFILE       _ROOT_PATH "/etc/ppp/pap-secrets"
++#define PPP_PATH_CHAPFILE       _ROOT_PATH "/etc/ppp/chap-secrets"
++#define PPP_PATH_SRPFILE        _ROOT_PATH "/etc/ppp/srp-secrets"
++#define XL2TPD_PATH_UPAPFILE 	 _ROOT_PATH "/var/run/xl2tpd/l2tp-secrets"
++#define XL2TPD_PATH_CHAPFILE 	 _ROOT_PATH "/var/run/xl2tpd/l2tp-secrets"
++#define PPTPD_PATH_UPAPFILE 	 _ROOT_PATH "/var/run/pptpd/pptp-secrets"
++#define PPTPD_PATH_CHAPFILE 	 _ROOT_PATH "/var/run/pptpd/pptp-secrets"
++
+ 
+ #ifdef PPP_WITH_EAPTLS
+ #define PPP_PATH_EAPTLSCLIFILE  PPP_PATH_CONFDIR "/eaptls-client"
+
+--- ori_ppp-2.5.0/pppd/pppd-private.h	2022-12-30 09:12:39.000000000 +0800
++++ ppp-2.5.0/pppd/pppd-private.h	2023-04-20 15:17:08.329602776 +0800
+@@ -87,6 +87,12 @@
+ };
+ 
+ /*
++ * add_notifier - backward compatible for pptpd-logwtmp.so of accel-pptp-0.8.5
++ */
++typedef void (*notify_fngg) (void *, int);
++void add_notifier(struct notifier **notif, notify_fngg func, void *arg);
++
++/*
+  * Global variables.
+  */
+ 
+@@ -556,7 +562,14 @@
+ #endif /* LOG_PPP */
+ 
+ #ifdef DEBUGMAIN
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++#include "cms_log.h"
++extern SINT32 checkDslLinkStatus(void);
++/* do this for all the other xxxDEBUG macros below */
++#define MAINDEBUG(x) cmsLog_debug x
++#else
+ #define MAINDEBUG(x)	if (debug) dbglog x
++#endif /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */
+ #else
+ #define MAINDEBUG(x)
+ #endif
+
+--- ori_ppp-2.5.0/pppd/pppd.h	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/pppd.h	2023-04-18 17:59:35.353410613 +0800
+@@ -48,7 +48,7 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ #include <sys/types.h>
+-
++#include <sys/param.h>		/* for MAXPATHLEN and BSD4_4, if defined */
+ #include "pppdconf.h"
+ 
+ #ifdef __cplusplus
+@@ -64,7 +64,39 @@
+ #define MAXNAMELEN	256	/* max length of hostname or name for auth */
+ #define MAXSECRETLEN	256	/* max length of password or secret */
+ 
+-
++// brcm
++#define IFC_PPP_SESSION_LEN         18          /**< pppoe session length */
++extern char	*servicename; /* service name from the connection, definition in main.c */
++extern char	req_name[MAXPATHLEN]; /* logical name for link, definition in options.c */
++#define FIELD0    4        /* ppp device number ppp0, ppp1, the third digit (max 16) */
++#define FIELD1    8        /* if 0, default mode, 1 vlan mux, 2 msc */    
++#define FIELD2    19       /* if FILED1 is 0, add no extension, 1 add vlan id, 2 add conId for msc */
++#define LOCALDEV "lo"
++#define LIB_PPTP_PATH "/lib/pptp.so"
++extern int isPppoa;               /* flag for pppoa, definition in options.c*/
++extern int isPppL2tp;             /* flag for L2TP, definition in options.c */
++extern int isPptp;                /* flag for PPTP, definition in options.c */
++extern int ipext;
++extern int autoscan;
++extern int autoscanP2;
++extern int console;
++extern int redisconn;
++extern int use_xl2tpd_secrets_path;   /* definition in auth.c */
++extern int use_pptpd_secrets_path;    /* definition in auth.c */
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++#include "cms_util.h"
++#include "cms_msg.h"
++extern int link_up(char *);
++extern int lan_link_up(void);
++extern int isLanLinkUp();
++extern int isWanLinkUp(char *deviceName);
++extern void create_msg(int lognumber, char *lastConnectionError);
++extern void save_session_info(unsigned char *remote_addr, int sid);
++extern void sendPppEventMessage(const SINT32 state, const char *ip, const char *mask, const char *gateway, const char *nameserver, const char *lastconnectionerror, const UINT32 sessionId);
++extern void sendIPv6CPEventMessage(SINT32 state, const char *localIntfId, const char *remoteIntfId, const char *lastconnectionerror);
++#endif /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */
++extern char oldsession[MAXPATHLEN];  /* Mac address and session ID of the previous session */
++// end brcm
+ /*
+  * Values for phase.
+  */
+@@ -444,6 +476,7 @@
+  * Restore device setting
+  */
+ void ppp_generic_disestablish(int dev_fd);
++void generic_disestablish_ppp(int dev_fd);
+ 
+ /*
+  * Set the interface MTU
+@@ -459,6 +492,7 @@
+  * Make a ppp interface
+  */
+ int ppp_generic_establish(int dev_fd);
++int generic_establish_ppp(int dev_fd);
+ 
+ /*
+  * Get the peer's authentication name
+@@ -563,7 +597,6 @@
+ extern int  (*allowed_address_hook)(uint32_t addr);
+ extern void (*snoop_recv_hook)(unsigned char *p, int len);
+ extern void (*snoop_send_hook)(unsigned char *p, int len);
+-
+ #ifdef __cplusplus
+ }
+ #endif
+
+--- ori_ppp-2.5.0/pppd/options.h	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/options.h	2023-04-18 17:58:03.073408519 +0800
+@@ -104,6 +104,7 @@
+ 
+ /* Add additional supported options by e.g. plug-in */
+ void ppp_add_options(struct option *options);
++void add_options(struct option *options);
+ 
+ /* Parse options from an options file */
+ int ppp_options_from_file(char *filename, int must_exist, int check_prot,
+
+
+--- ori_ppp-2.5.0/pppd/auth.c	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/auth.c	2023-04-14 15:41:26.345786985 +0800
+@@ -96,6 +96,10 @@
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ 
++// brcm
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
++#include <syscall.h>
++#endif
+ 
+ #ifdef HAVE_SHADOW_H
+ #include <shadow.h>
+@@ -253,6 +257,9 @@
+ bool explicit_user = 0;		/* Set if "user" option supplied */
+ bool explicit_passwd = 0;	/* Set if "password" option supplied */
+ char remote_name[MAXNAMELEN];	/* Peer's name for authentication */
++//brcm
++int use_xl2tpd_secrets_path = 0;
++int use_pptpd_secrets_path = 0;
+ 
+ #if defined(PPP_WITH_EAPTLS) || defined(PPP_WITH_PEAP)
+ char *cacert_file  = NULL;  /* CA certificate file (pem format) */
+@@ -277,6 +284,11 @@
+ 
+ static void network_phase (int);
+ static void check_idle (void *);
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++// brcm
++static void check_link __P((void *));
++static void check_lan_link __P((void *));
++#endif
+ static void connect_time_expired (void *);
+ static int  null_login (int);
+ static int  get_pap_passwd (char *);
+@@ -846,6 +858,9 @@
+ 	    warn("peer refused to authenticate: terminating link");
+ 	    ppp_set_status(EXIT_PEER_AUTH_FAILED);
+ 	    lcp_close(unit, "peer refused to authenticate");
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	    create_msg(BCM_PPPOE_AUTH_FAILED, CMSVS_ERROR_AUTHENTICATION_FAILURE);		
++#endif	    
+ 	    return;
+ 	}
+     }
+@@ -1021,6 +1036,9 @@
+      */
+     ppp_set_status(EXIT_PEER_AUTH_FAILED);
+     lcp_close(unit, "Authentication failed");
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    create_msg(BCM_PPPOE_AUTH_FAILED, CMSVS_ERROR_AUTHENTICATION_FAILURE);	
++#endif    
+ }
+ 
+ /*
+@@ -1096,6 +1114,15 @@
+      */
+     ppp_set_status(EXIT_AUTH_TOPEER_FAILED);
+     lcp_close(unit, "Failed to authenticate ourselves to peer");
++// brcm
++    if ((strlen(user) > 0) || autoscanP2) {
++        printf("PPP: Authentication failed.\n");
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++        create_msg(BCM_PPPOE_AUTH_FAILED, CMSVS_ERROR_AUTHENTICATION_FAILURE); 
++#endif
++        syslog(LOG_ERR,"User name and password authentication failed.\n");
++    }
++    persist=0;    
+ }
+ 
+ /*
+@@ -1176,6 +1203,15 @@
+ 	    tlim = ppp_get_max_idle_time();
+ 	if (tlim > 0)
+ 	    TIMEOUT(check_idle, NULL, tlim);
++	    
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	// brcm
++	TIMEOUT(check_link, NULL, 3);
++
++	// brcm
++	if (ipext)
++	    TIMEOUT(check_lan_link, NULL, 5);
++#endif
+ 
+ 	/*
+ 	 * Set a timeout to close the connection once the maximum
+@@ -1217,6 +1253,12 @@
+ 	UNTIMEOUT(check_idle, NULL);
+ 	UNTIMEOUT(connect_time_expired, NULL);
+ 	UNTIMEOUT(check_maxoctets, NULL);
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	// brcm
++	UNTIMEOUT(check_link, NULL);
++	if (ipext)
++	    UNTIMEOUT(check_lan_link, NULL);
++#endif	
+ 	new_phase(PHASE_NETWORK);
+     }
+ }
+@@ -1274,6 +1316,41 @@
+     }
+ }
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++
++struct IntfStats_s {
++    unsigned long long byteRx, packetRx, packetErrRx, packetDropRx, packetFifoRx, packetFrameRx, packetCompRx,
++        packetMultiRx, byteTx, packetTx, packetErrTx, packetDropTx, packetFifoTx, packetCollTx, packetCarrTx,
++        packetCompTx, packetMultiTx, byteMultiRx, byteMultiTx, packetUniRx, packetUniTx, packetBcastRx,
++        packetBcastTx, packetUnknownerrRx;
++};
++
++int getIntfStats(const char *devName, struct IntfStats_s *s);
++
++#define get_idle_time brcm_get_idle_time
++
++static int brcm_get_idle_time(int u, struct ppp_idle *idle)
++{
++    static unsigned long long saved_rx_packets, saved_tx_packets;
++    static time_t last_xmit, last_recv;
++    struct IntfStats_s stats = {};
++    time_t now = time(NULL);
++
++    if (getIntfStats(req_name, &stats))
++        return 0;
++    if (stats.packetTx != saved_tx_packets)
++        last_xmit = now;
++    if (stats.packetRx != saved_rx_packets)
++        last_recv = now;
++    saved_tx_packets = stats.packetTx;
++    saved_rx_packets = stats.packetRx;
++    idle->xmit_idle = now - last_xmit;
++    idle->recv_idle = now - last_recv;
++    return 1;
++}
++
++#endif
++
+ /*
+  * check_idle - check whether the link has been idle for long
+  * enough that we can shut it down.
+@@ -1299,11 +1376,85 @@
+ 	ppp_set_status(EXIT_IDLE_TIMEOUT);
+ 	lcp_close(0, "Link inactive");
+ 	need_holdoff = 0;
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++        create_msg(BCM_PPPOE_REPORT_LASTCONNECTERROR, CMSVS_ERROR_IDLE_DISCONNECT);
++#endif
++        redisconn = 0;
++        sprintf(oldsession, "%s", "");
+     } else {
+-	TIMEOUT(check_idle, NULL, tlim);
++        TIMEOUT(check_idle, NULL, 3 + tlim); /* +3, better check late than early */
+     }
+ }
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++
++/** Check WAN link status.
++ * 
++ * I guess WAN link can mean either the DSL link or the eth0 link if we are in
++ * ethernet as wan code.  There is code below here that looks at LAN status,
++ * but it appears to be dealing with IP extensions, not ethernet as wan.
++ *
++ * @return 1 if link is up. 0 otherwise.
++ */
++int link_up(char *deviceName)
++{
++    if ((isPppL2tp) || (isPptp))
++	return 1;
++   return isWanLinkUp(deviceName);
++}
++
++// brcm
++static void
++check_link(arg)
++    void *arg;
++{
++    if (!link_up(devnam)) {
++        /* link is idle: shut it down. */
++        notice("Terminating connection due to link down.");
++        lcp_close(0, "Link down");
++        need_holdoff = 0;
++        ppp_set_status(EXIT_IDLE_TIMEOUT);
++        // brcm
++        /* TODO: need to act on idle disconnection in RCL handler.*/
++        create_msg(BCM_PPPOE_REPORT_LASTCONNECTERROR, CMSVS_ERROR_IDLE_DISCONNECT);
++    } else {
++        UNTIMEOUT(check_link, NULL);
++        TIMEOUT(check_link, NULL, 3);
++    }
++}
++
++int lan_pending_cur=0;
++int lan_pending_max=36;
++
++int lan_link_up()
++{
++   return isLanLinkUp();
++}
++
++static void
++check_lan_link(arg)
++    void *arg;
++{
++    if (!lan_link_up()) {
++        lan_pending_cur++;
++        if (lan_pending_cur >= lan_pending_max) {
++            /* link is idle: shut it down. */
++            lan_pending_cur=0;
++            notice("Terminating connection due to link down.");
++            lcp_close(0, "Link down");
++            need_holdoff = 0;
++            ppp_set_status(EXIT_IDLE_TIMEOUT);
++	    }
++        UNTIMEOUT(check_lan_link, NULL);
++        TIMEOUT(check_lan_link, NULL, 5);
++    } else {
++        lan_pending_cur=0;
++        UNTIMEOUT(check_lan_link, NULL);
++        TIMEOUT(check_lan_link, NULL, 5);
++    }
++}
++#endif
++
+ /*
+  * connect_time_expired - log a message and close the connection.
+  */
+@@ -1313,6 +1464,9 @@
+     info("Connect time expired");
+     ppp_set_status(EXIT_CONNECT_TIME);
+     lcp_close(0, "Connect time expired");	/* Close connection */
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    create_msg(BCM_PPPOE_REPORT_LASTCONNECTERROR, CMSVS_ERROR_ISP_TIME_OUT);
++#endif    
+ }
+ 
+ /*
+@@ -1532,7 +1686,12 @@
+      * Open the file of pap secrets and scan for a suitable secret
+      * for authenticating this user.
+      */
+-    filename = PPP_PATH_UPAPFILE;
++    if(use_xl2tpd_secrets_path)
++        filename = XL2TPD_PATH_UPAPFILE;
++    else if(use_pptpd_secrets_path)
++        filename = PPTPD_PATH_UPAPFILE;    
++    else   
++        filename = PPP_PATH_UPAPFILE;
+     addrs = opts = NULL;
+     ret = UPAP_AUTHNAK;
+     f = fopen(filename, "r");
+@@ -1633,7 +1792,12 @@
+      * Open the file of pap secrets and scan for a suitable secret.
+      */
+     if (ret <= 0) {
+-	filename = PPP_PATH_UPAPFILE;
++	if(use_xl2tpd_secrets_path)
++	    filename = XL2TPD_PATH_UPAPFILE;
++	else if(use_pptpd_secrets_path)
++	    filename = PPTPD_PATH_UPAPFILE;      
++	else  
++	    filename = PPP_PATH_UPAPFILE;
+ 	addrs = NULL;
+ 	f = fopen(filename, "r");
+ 	if (f == NULL)
+@@ -1679,8 +1843,12 @@
+ 	if (ret >= 0)
+ 	    return ret;
+     }
+-
+-    filename = PPP_PATH_UPAPFILE;
++    if(use_xl2tpd_secrets_path)
++        filename = XL2TPD_PATH_UPAPFILE;
++    else if(use_pptpd_secrets_path)
++        filename = PPTPD_PATH_UPAPFILE;      
++    else   
++        filename = PPP_PATH_UPAPFILE;
+     f = fopen(filename, "r");
+     if (f == NULL)
+ 	return 0;
+@@ -1758,8 +1926,12 @@
+ 	    return ret;
+ 	}
+     }
+-
+-    filename = PPP_PATH_CHAPFILE;
++    if(use_xl2tpd_secrets_path)
++        filename = XL2TPD_PATH_CHAPFILE;
++    else if(use_pptpd_secrets_path)
++        filename = PPTPD_PATH_CHAPFILE;      
++    else   
++        filename = PPP_PATH_CHAPFILE;
+     f = fopen(filename, "r");
+     if (f == NULL)
+ 	return 0;
+@@ -1845,7 +2017,12 @@
+ 	    return 0;
+ 	}
+     } else {
+-	filename = PPP_PATH_CHAPFILE;
++        if(use_xl2tpd_secrets_path)
++	    filename = XL2TPD_PATH_CHAPFILE;
++        else if(use_pptpd_secrets_path)
++	    filename = PPTPD_PATH_CHAPFILE;      
++        else  
++        filename = PPP_PATH_CHAPFILE;
+ 	addrs = NULL;
+ 	secbuf[0] = 0;
+
+         
+--- ori_ppp-2.5.0/pppd/session.c	2022-12-30 09:12:39.000000000 +0800
++++ ppp-2.5.0/pppd/session.c	2023-04-18 14:58:16.437150296 +0800
+@@ -315,7 +315,7 @@
+ 	    return SESSION_FAILED;
+ 
+ #ifdef HAVE_SHADOW_H
+-
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ 	spwd = getspnam(user);
+ 	endspent();
+ 
+@@ -344,7 +344,7 @@
+ 
+ 	/* We have a valid shadow entry, keep the password */
+ 	pw->pw_passwd = spwd->sp_pwdp;
+-
++#endif /* #if !defined(BRCM_CMS_BUILD) */
+ #endif /* #ifdef HAVE_SHADOW_H */
+ 
+ 	/*
+
+--- ori_ppp-2.5.0/pppd/tty.c	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/tty.c	2023-04-14 16:33:03.797857298 +0800
+@@ -576,6 +576,7 @@
+ 	 * Get a pty master/slave pair if the pty, notty, socket,
+ 	 * or record options were specified.
+ 	 */
++	strcpy(devnam, "lo");
+ 	strlcpy(ppp_devname, devnam, MAXPATHLEN);
+ 	pty_master = -1;
+ 	pty_slave = -1;
+
+
+--- ori_ppp-2.5.0/pppd/utils.c	2022-12-30 09:12:39.000000000 +0800
++++ ppp-2.5.0/pppd/utils.c	2023-04-27 16:17:47.118392568 +0800
+@@ -612,16 +612,41 @@
+ static void
+ log_write(int level, char *buf)
+ {
+-    syslog(level, "%s", buf);
+-    if (log_to_fd >= 0 && (level != LOG_DEBUG || debug)) {
+-	int n = strlen(buf);
+-
+-	if (n > 0 && buf[n-1] == '\n')
+-	    --n;
+-	if (write(log_to_fd, buf, n) != n
+-	    || write(log_to_fd, "\n", 1) != 1)
+-	    log_to_fd = -1;
+-    }
++    if (!console) {
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    /*
++     * In CMS, it is best to avoid going down this call sequence
++     * because the CMS logging also logs the function name, but if
++     * we log via dbglog, info, notice, logit, etc. all the function names
++     * will come out as log_write instead of the real function where the
++     * logging was done.  The prefered way is to use the MAINDEBUG, SYSDEBUG, etc
++     * macros in pppd.h. 
++     */
++        if (level >= LOG_DEBUG) {
++           cmsLog_debug(buf);
++        }
++        else if (level >=LOG_WARNING) {
++           cmsLog_notice(buf);
++        }
++        else {
++           cmsLog_error(buf);
++        }
++
++#endif /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */
++     } 
++     else 
++     {    
++         syslog(level, "%s", buf);
++         if (log_to_fd >= 0 && (level != LOG_DEBUG || debug)) {
++	     int n = strlen(buf);
++
++	     if (n > 0 && buf[n-1] == '\n')
++	         --n;
++	     if (write(log_to_fd, buf, n) != n
++	         || write(log_to_fd, "\n", 1) != 1)
++	         log_to_fd = -1;
++         }
++     }
+ }
+ #else
+ static void
+@@ -973,3 +998,32 @@
+     }
+ }
+ 
++/** Create a mesage to inform ssk the state and lastConnectionError on the ppp object.  
++ *
++ * @param int (IN) lognumber  ppp state -- see cms_msg.h for detail
++ * @param char * (IN) lastConnectionError -- report the last connction error string  defined in tr98
++ *
++ */
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++void create_msg(int lognumber, char *lastConnectionError)
++{
++   if(!isPppL2tp && !isPptp)
++   sendPppEventMessage(lognumber, NULL, NULL, NULL, NULL, lastConnectionError, 0);   
++}
++
++void save_session_info(unsigned char *remote_addr, int sid)
++{
++   sprintf(oldsession, "%02x%02x%02x%02x%02x%02x/%04x", remote_addr[0], remote_addr[1], remote_addr[2],
++      remote_addr[3], remote_addr[4], remote_addr[5], sid);
++
++   if (cmsPsp_set(req_name, oldsession, IFC_PPP_SESSION_LEN) != CMSRET_SUCCESS)
++   {
++       cmsLog_error("Unable to save ppp session info in scratch PAD");
++   }  
++   else
++   {
++      /* we can remove this printf once this issue is fixed */
++      printf("saving ppp session info %s(%s)\n", req_name, oldsession);
++   }
++}
++#endif  /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */
+
+
+--- ori_ppp-2.5.0/pppd/ipcp.c	2022-12-30 09:12:39.000000000 +0800
++++ ppp-2.5.0/pppd/ipcp.c	2023-04-14 15:58:58.469810868 +0800
+@@ -61,6 +61,11 @@
+ #include "ipcp.h"
+ #include "pathnames.h"
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
++#include <syscall.h>
++#include <unistd.h>
++#endif
++
+ 
+ /* global vars */
+ ipcp_options ipcp_wantoptions[NUM_PPP];	/* Options that we want to request */
+@@ -86,7 +91,7 @@
+ /* local vars */
+ static int default_route_set[NUM_PPP];	/* Have set up a default route */
+ static int proxy_arp_set[NUM_PPP];	/* Have created proxy arp entry */
+-static bool usepeerdns;			/* Ask peer for DNS addrs */
++static bool usepeerdns=1;			/* Ask peer for DNS addrs */
+ static bool usepeerwins;		/* Ask peer for WINS addrs */
+ static int ipcp_is_up;			/* have called np_up() */
+ static int ipcp_is_open;		/* haven't called np_finished() */
+@@ -94,6 +99,13 @@
+ static char vj_value[8];		/* string form of vj option value */
+ static char netmask_str[20];		/* string form of netmask value */
+ 
++// brcm
++static char local_ip[32]="";
++static char subnet_ip[32]="";
++static char router_ip[32]="";
++static char dns_ip[64]="";
++int redisconn=0;
++
+ /*
+  * Callbacks for fsm code.  (CI = Configuration Information)
+  */
+@@ -172,10 +184,10 @@
+     { "noipdefault", o_bool, &disable_defaultip,
+       "Don't use name for default IP adrs", 1 },
+ 
+-    { "ms-dns", o_special, (void *)setdnsaddr,
+-      "DNS address for the peer's use", OPT_A2LIST },
+-    { "ms-wins", o_special, (void *)setwinsaddr,
+-      "Nameserver for SMB over TCP/IP for peer", OPT_A2LIST },
++    { "ms-dns", 1, (void *)setdnsaddr,
++      "DNS address for the peer's use" },
++    { "ms-wins", 1, (void *)setwinsaddr,
++      "Nameserver for SMB over TCP/IP for peer" },
+ 
+     { "ipcp-restart", o_int, &ipcp_fsm[0].timeouttime,
+       "Set timeout for IPCP", OPT_PRIO },
+@@ -477,6 +489,9 @@
+ 	    wo->hisaddr = remote;
+ 	prio_remote = option_priority;
+     }
++    
++    // brcm    
++    ask_for_local = wo->ouraddr != 0 || !disable_defaultip;
+ 
+     return 1;
+ }
+@@ -1816,7 +1831,7 @@
+ 	ho->hisaddr = wo->hisaddr;
+ 
+     if (!(go->neg_addr || go->old_addrs) && (wo->neg_addr || wo->old_addrs)
+-	&& wo->ouraddr != 0) {
++	&& wo->ouraddr != 0 && !ask_for_local) {
+ 	error("Peer refused to agree to our IP address");
+ 	ipcp_close(f->unit, "Refused our IP address");
+ 	return;
+@@ -1987,6 +2002,57 @@
+     ipcp_is_up = 1;
+ 
+     notify(ip_up_notifier, 0);
++    
++     // brcm
++    strcpy(local_ip, ip_ntoa(go->ouraddr));
++    //strcpy(subnet_ip, ip_ntoa(mask));
++    strcpy(subnet_ip, "255.255.255.255");
++    if (ip_ntoa(ho->hisaddr))
++        strcpy(router_ip, ip_ntoa(ho->hisaddr));
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++
++   if (go->dnsaddr[0])
++   {
++      strcpy(dns_ip, ip_ntoa(go->dnsaddr[0]));
++   }
++   if (go->dnsaddr[1])
++   {
++      if (strlen(dns_ip) > 0)
++		{
++		   strcat(dns_ip, ",");
++         strcat(dns_ip, ip_ntoa(go->dnsaddr[1]));
++      }
++      else
++      {
++         strcpy(dns_ip, ip_ntoa(go->dnsaddr[1]));
++      }         
++   }
++#else			    
++    if (go->dnsaddr[0]) {
++	strcpy(dns_ip, "nameserver ");
++        strcat(dns_ip, ip_ntoa(go->dnsaddr[0]));
++    }
++    if (go->dnsaddr[1]) {
++        strcat(dns_ip, "\n");
++	strcat(dns_ip, "nameserver ");
++        strcat(dns_ip, ip_ntoa(go->dnsaddr[1]));
++    }
++#endif /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */   
++     
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    if (isPppL2tp || isPptp) 
++    {
++        char cmd[256] = {0};
++       
++        sleep(1);
++        sprintf(cmd, " iptables -w -t nat -D POSTROUTING -o %s -j MASQUERADE 2> /dev/null", req_name);
++        system(cmd);
++        sleep(1);
++        sprintf(cmd, " iptables -w -t nat -A POSTROUTING -o %s -j MASQUERADE 2> /dev/null", req_name);
++        system(cmd);
++    }
++#endif
++    
+     if (ip_up_hook)
+ 	ip_up_hook();
+ 
+@@ -1994,10 +2060,35 @@
+      * Execute the ip-up script, like this:
+      *	/etc/ppp/ip-up interface tty speed local-IP remote-IP
+      */
++     
+     if (ipcp_script_state == s_down && ipcp_script_pid == 0) {
+-	ipcp_script_state = s_up;
+-	ipcp_script(path_ipup, 0);
++        ipcp_script_state = s_up;
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)	
++        ipcp_script(path_ipup, 0);
++#endif	
++    }
++
++// brcm
++    if (autoscan) {
++	    ipcp_close(f->unit, "Autoscan down");
++	    need_holdoff = 0;
++	    /* note: autoscan is not enabled now */
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	    create_msg(BCM_PPPOE_CLIENT_STATE_DOWN, CMSVS_ERROR_UNKNOWN);
++#endif
++	    return;
+     }
++    else {
++        printf("PPP: %s IPv4 Connection Up.\n", req_name);
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++        if (isPppL2tp)
++            info("IPCP: L2TP linkname intf %s Up.\n", req_name);
++        else if (isPptp)
++            info("IPCP: PPTP linkname intf %s Up.\n", req_name);  
++        else sendPppEventMessage(BCM_PPPOE_CLIENT_STATE_UP, local_ip, subnet_ip, router_ip, dns_ip, CMSVS_ERROR_NONE, ppp_session_number);
++#endif
++        syslog(LOG_CRIT,"Received valid IP address from server.  Connection UP.\n");   
++    }    
+ }
+ 
+ 
+@@ -2044,9 +2135,21 @@
+ 
+     /* Execute the ip-down script */
+     if (ipcp_script_state == s_up && ipcp_script_pid == 0) {
+-	ipcp_script_state = s_down;
+-	ipcp_script(path_ipdown, 0);
++        ipcp_script_state = s_down;
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
++        ipcp_script(path_ipdown, 0);
++#endif
+     }
++// brcm
++    printf("PPP: %s IPv4 Connection Down.\n", req_name);
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    if (isPppL2tp)
++        info("IPCP: L2TP linkname intf %s Down.\n", req_name);
++    else if (isPptp)
++        info("IPCP: PPTP linkname intf %s Down.\n", req_name);  
++    else create_msg(BCM_PPPOE_CLIENT_STATE_DOWN, CMSVS_ERROR_UNKNOWN);
++#endif
++    syslog(LOG_CRIT,"Clear IP addresses.  Connection DOWN.\n");   
+ }
+ 
+ 
+@@ -2150,6 +2253,14 @@
+ static void
+ create_resolv(u_int32_t peerdns1, u_int32_t peerdns2)
+ {
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++   /*
++    * Don't create "/var/fyi/sys/dns" in CMS.
++    * This ifdef stuff is temporary.  When we completely convert to CMS in
++    * the development branch, we can get rid of the original code. 
++    */
++   return;
++#else    
+     FILE *f;
+ 
+     f = fopen(PPP_PATH_RESOLV, "w");
+@@ -2168,6 +2279,7 @@
+ 	error("Write failed to %s: %m", PPP_PATH_RESOLV);
+ 
+     fclose(f);
++#endif    
+ }
+ 
+ /*
+
+--- ori_ppp-2.5.0/pppd/ipv6cp.c	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/ipv6cp.c	2023-04-14 16:06:07.961820618 +0800
+@@ -171,6 +171,9 @@
+ #include "magic.h"
+ #include "pathnames.h"
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
++#include <stdlib.h>
++#endif
+ 
+ /* global vars */
+ ipv6cp_options ipv6cp_wantoptions[NUM_PPP];     /* Options that we want to request */
+@@ -312,7 +315,7 @@
+     ipv6cp_close,
+     ipv6cp_printpkt,
+     NULL,
+-    1,
++    0,
+     "IPV6CP",
+     "IPV6",
+     ipv6cp_option_list,
+@@ -448,8 +451,7 @@
+     memset(wo, 0, sizeof(*wo));
+     memset(ao, 0, sizeof(*ao));
+ 
+-    wo->accept_local = 0;
+-    wo->accept_remote = 0;
++    wo->accept_local = 1;
+     wo->neg_ifaceid = 1;
+     ao->neg_ifaceid = 1;
+ 
+@@ -1370,7 +1372,23 @@
+ 
+     np_up(f->unit, PPP_IPV6);
+     ipv6cp_is_up = 1;
++    
++    printf("PPP: %s IPv6 Connection Up.\n", req_name);
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    {
++        char local[CMS_IPADDR_LENGTH]={0};
++        char remote[CMS_IPADDR_LENGTH]={0};
++
++        snprintf(local, CMS_IPADDR_LENGTH, "::%02x%02x:%02x%02x:%02x%02x:%02x%02x",
++	   	go->ourid.e8[0], go->ourid.e8[1], go->ourid.e8[2], go->ourid.e8[3], go->ourid.e8[4],
++	   	go->ourid.e8[5], go->ourid.e8[6], go->ourid.e8[7]);
++        snprintf(remote, CMS_IPADDR_LENGTH, "::%02x%02x:%02x%02x:%02x%02x:%02x%02x",
++	   	ho->hisid.e8[0], ho->hisid.e8[1], ho->hisid.e8[2], ho->hisid.e8[3], ho->hisid.e8[4],
++	   	ho->hisid.e8[5], ho->hisid.e8[6], ho->hisid.e8[7]);
+ 
++        sendIPv6CPEventMessage(BCM_PPPOE_CLIENT_IPV6_STATE_UP, llv6_ntoa(go->ourid), llv6_ntoa(ho->hisid), CMSVS_ERROR_NONE);
++    }
++#endif
+     notify(ipv6_up_notifier, 0);
+     if (ipv6_up_hook)
+        ipv6_up_hook();
+@@ -1396,6 +1414,9 @@
+ ipv6cp_down(fsm *f)
+ {
+     IPV6CPDEBUG(("ipv6cp: down"));
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    sendIPv6CPEventMessage(BCM_PPPOE_CLIENT_IPV6_STATE_DOWN, NULL, NULL, CMSVS_ERROR_UNKNOWN);
++#endif 
+     ppp_get_link_stats(NULL);
+     notify(ipv6_down_notifier, 0);
+     if (ipv6_down_hook)
+@@ -1429,6 +1450,8 @@
+ #endif
+     }
+ 
++    printf("PPP: %s IPv6 Connection Down.\n", req_name);
++
+     /* Execute the ipv6-down script */
+     if (ipv6cp_script_state == s_up && ipv6cp_script_pid == 0) {
+ 	ipv6cp_script_state = s_down;
+
+--- ori_ppp-2.5.0/pppd/lcp.c	2022-12-30 09:12:39.000000000 +0800
++++ ppp-2.5.0/pppd/lcp.c	2023-04-14 16:16:06.397834203 +0800
+@@ -70,12 +70,12 @@
+ /*
+  * LCP-related command-line options.
+  */
+-int	lcp_echo_interval = 0; 	/* Interval between LCP echo-requests */
+-int	lcp_echo_fails = 0;	/* Tolerance to unanswered echo-requests */
++int	lcp_echo_interval = 30; 	/* Interval between LCP echo-requests */
++int	lcp_echo_fails = 3;	/* Tolerance to unanswered echo-requests */
+ bool	lcp_echo_adaptive = 0;	/* request echo only if the link was idle */
+ bool	lax_recv = 0;		/* accept control chars in asyncmap */
+ bool	noendpoint = 0;		/* don't send/accept endpoint discriminator */
+-
++bool	auth_failed = 0;
+ static int noopt(char **);
+ 
+ #ifdef PPP_WITH_MULTILINK
+@@ -1594,6 +1594,20 @@
+ 			PUTSHORT(PPP_CHAP, nakp);
+ 			PUTCHAR(CHAP_DIGEST(ao->chap_mdtype), nakp);
+ 		    }
++		    // brcm
++		    if (!auth_failed) {
++    			printf("PPP: Authentication failed.\n");
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    			create_msg(BCM_PPPOE_AUTH_FAILED, CMSVS_ERROR_AUTHENTICATION_FAILURE);		
++#endif
++    			syslog(LOG_ERR,"Authentication method failed.\n");
++    			need_holdoff = 0;
++    			auth_failed = 1;
++    			lcp_close(0, "Auth failed");
++    			ppp_set_status(EXIT_AUTH_TOPEER_FAILED);
++		    }
++		    persist=0;
++		    			    
+ 		    break;
+ 		}
+ 		ho->neg_upap = 1;
+@@ -1616,6 +1630,20 @@
+ 		    } else {
+ 			PUTSHORT(PPP_PAP, nakp);
+ 		    }
++// brcm
++		    if (!auth_failed) {
++    			printf("PPP: Authentication failed.\n");
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    			create_msg(BCM_PPPOE_AUTH_FAILED, CMSVS_ERROR_AUTHENTICATION_FAILURE);		
++#endif
++    			syslog(LOG_ERR,"Authentication method failed.\n");
++    			need_holdoff = 0;
++    			auth_failed = 1;
++    			lcp_close(0, "Auth failed");
++    			ppp_set_status(EXIT_AUTH_TOPEER_FAILED);
++		    }
++		    persist=0;
++		    		    
+ 		    break;
+ 		}
+ 		GETCHAR(cichar, p);	/* get digest type */
+@@ -1887,6 +1915,12 @@
+     lcp_echo_lowerup(f->unit);  /* Enable echo messages */
+ 
+     link_established(f->unit);
++// brcm
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    if (!auth_failed)
++        create_msg(BCM_PPPOE_SERVICE_AVAILABLE, CMSVS_ERROR_NONE);
++#endif
++    syslog(LOG_CRIT,"PPP LCP UP.\n");    
+ }
+ 
+ 
+@@ -2189,6 +2223,9 @@
+         notice("Serial link appears to be disconnected.");
+ 	ppp_set_status(EXIT_PEER_DEAD);
+ 	lcp_close(f->unit, "Peer not responding");
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	    create_msg(BCM_PPPOE_REPORT_LASTCONNECTERROR, CMSVS_ERROR_ISP_TIME_OUT);
++#endif	
+     }
+ }
+ 
+--- ori_ppp-2.5.0/pppd/sys-linux.c	2023-03-10 09:50:41.000000000 +0800
++++ ppp-2.5.0/pppd/sys-linux.c	2023-04-18 18:04:59.433417970 +0800
+@@ -127,6 +127,11 @@
+ #include <arpa/inet.h>
+ 
+ #include <linux/ppp-ioctl.h>
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++#ifdef SUPPORT_IPV6
++#include "prctl.h"
++#endif
++#endif
+ 
+ #include <linux/netlink.h>
+ #include <linux/rtnetlink.h>
+@@ -163,6 +168,7 @@
+ #include "options.h"
+ #include "fsm.h"
+ #include "ipcp.h"
++#include "bcmnet.h" //brcm
+ 
+ #ifdef PPP_WITH_IPV6CP
+ #include "eui64.h"
+@@ -652,13 +658,9 @@
+ 
+     if (new_style_driver) {
+ 	int flags;
+-
+-	/* If a ppp_fd is already open, close it first */
+-	if (ppp_fd >= 0) {
+-	    close(ppp_fd);
+-	    remove_fd(ppp_fd);
+-	    ppp_fd = -1;
+-	}
++    
++    if (isPptp || isPppL2tp)
++        strcpy(devnam, LOCALDEV);
+ 
+ 	/* Open an instance of /dev/ppp and connect the channel to it */
+ 	if (ioctl(fd, PPPIOCGCHAN, &chindex) == -1) {
+@@ -746,6 +748,16 @@
+ 
+ /********************************************************************
+  *
++ * generic_establish_ppp - backward compatible for pptp.so of accel-pptp-0.8.5
++ * 
++ ********************************************************************/
++int generic_establish_ppp (int fd)
++{
++	return ppp_generic_establish(fd);
++}
++
++/********************************************************************
++ *
+  * tty_disestablish_ppp - Restore the serial port to normal operation.
+  * This shouldn't call die() because it's called from die().
+  */
+@@ -814,6 +826,16 @@
+     }
+ }
+ 
++/********************************************************************
++ *
++ * generic_disestablish_ppp - backward compatible for pptp.so of accel-pptp-0.8.5
++ * 
++ ********************************************************************/
++void generic_disestablish_ppp(int dev_fd)
++{
++	return ppp_generic_disestablish(dev_fd);
++}
++
+ /*
+  * make_ppp_unit_rtnetlink - register a new ppp network interface for ppp_dev_fd
+  * with specified req_ifname via rtnetlink. Interface name req_ifname must not
+@@ -899,6 +921,10 @@
+ static int make_ppp_unit(void)
+ {
+ 	int x, flags;
++	/* brcm */
++	unsigned num[3]={0, 0, 0};
++	char *p;
++	/*end brcm */
+ 
+ 	if (ppp_dev_fd >= 0) {
+ 		dbglog("in make_ppp_unit, already had /dev/ppp open?");
+@@ -911,34 +937,45 @@
+ 	if (flags == -1
+ 	    || fcntl(ppp_dev_fd, F_SETFL, flags | O_NONBLOCK) == -1)
+ 		warn("Couldn't set /dev/ppp to nonblock: %m");
+-
+-	/*
+-	 * Via rtnetlink it is possible to create ppp network interface with
+-	 * custom ifname atomically. But it is not possible to specify custom
+-	 * ppp unit id.
+-	 *
+-	 * Tools like systemd, udev or NetworkManager are trying to query
+-	 * interface attributes based on interface name immediately when new
+-	 * network interface is created. And therefore immediate interface
+-	 * renaming is causing issues.
++		
++	 /* brcm */	
++	 /* req_name will beused as ifname and  for
++	 * num[1] == 0:  default connection mdoe: ppp0, ppp1...
++	 * num[1] == 1:  vlanMux mode: ppp0.100, ppp1.200...  
++	 * num[1] == 2:  msc (multiple service mode) ppp0_1, ppp1_3...
++	 * num[1] == 3:  pppoa0, pppoa1...
+ 	 *
+-	 * So use rtnetlink API only when user requested custom ifname. It will
+-	 * avoid system issues with interface renaming.
+ 	 */
+-	if (req_unit == -1 && req_ifname[0] != '\0' && kernel_version >= KVERSION(2,1,16)) {
+-	    if (make_ppp_unit_rtnetlink()) {
+-		if (ioctl(ppp_dev_fd, PPPIOCGUNIT, &ifunit))
+-		    fatal("Couldn't retrieve PPP unit id: %m");
+-		return 0;
+-	    }
+-	    /*
+-	     * If interface with requested name already exist return error
+-	     * otherwise fallback to old ioctl method.
+-	     */
+-	    if (errno == EEXIST)
+-		return -1;
+-	}
+-
++	 if ((p = strchr(req_name, '.')) != NULL)
++	 {
++		/* vlan mux mode */
++		sscanf(&(req_name[3]), "%d.%d", num, num+2);
++		num[1] = 1;
++	 }
++	 else if ((p = strchr(req_name, '_')) != NULL)
++	 {
++		/* msc mode */
++		sscanf(&(req_name[3]), "%d_%d", num, num+2);
++		num[1] = 2;
++	 }
++	 else if ((p = strstr(req_name, "pppoa")) != NULL)
++	 {
++		/* pppoa */
++		num[0] = atoi(&req_name[5]);
++		num[1] = 3;
++	 }
++		else /* must be default mode */
++	 {
++		num[0] = atoi(&req_name[3]);
++	 }
++
++	 req_unit =  num[0]<<(FIELD1+FIELD2) | num[1]<<FIELD2 | num[2];
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	 cmsLog_debug("req_name=%s num0=%d, num1=%d, num2=%d, req_unit=%d",
++         req_name, num[0], num[1], num[2], req_unit);
++#endif
++    /*end brcm */
++    
+ 	ifunit = req_unit;
+ 	x = ioctl(ppp_dev_fd, PPPIOCNEWUNIT, &ifunit);
+ 	if (x < 0 && req_unit >= 0 && errno == EEXIST) {
+@@ -946,28 +983,27 @@
+ 		ifunit = -1;
+ 		x = ioctl(ppp_dev_fd, PPPIOCNEWUNIT, &ifunit);
+ 	}
+-	if (x < 0 && errno == EEXIST) {
+-		srand(time(NULL) * getpid());
+-		ifunit = rand() % 10000;
+-		x = ioctl(ppp_dev_fd, PPPIOCNEWUNIT, &ifunit);
+-	}
+ 	if (x < 0)
+ 		error("Couldn't create new ppp unit: %m");
+-
+-	if (x == 0 && req_ifname[0] != '\0') {
+-		struct ifreq ifr;
+-		char t[IFNAMSIZ];
+-		memset(&ifr, 0, sizeof(struct ifreq));
+-		slprintf(t, sizeof(t), "%s%d", PPP_DRV_NAME, ifunit);
+-		strlcpy(ifr.ifr_name, t, IFNAMSIZ);
+-		strlcpy(ifr.ifr_newname, req_ifname, IFNAMSIZ);
+-		x = ioctl(sock_fd, SIOCSIFNAME, &ifr);
+-		if (x < 0)
+-		    error("Couldn't rename interface %s to %s: %m", t, req_ifname);
++	else
++	{
++		x = bcmnet_ioctl_add_netdev_path(req_name, devnam);
++		if (x < 0) {
++			error("Couldn't set ppp real device (%s): %m", devnam);
++		}
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++#ifdef SUPPORT_IPV6
+ 		else
+-		    info("Renamed interface %s to %s", t, req_ifname);
+-	}
++		{
++			char cmd[BUFLEN_128];
+ 
++			/* accept router advertisement since autoconfigure using them */
++			sprintf(cmd, "echo 2 > /proc/sys/net/ipv6/conf/%s/accept_ra", req_name);
++			prctl_runCommandInShellBlocking(cmd);
++		}
++#endif
++#endif
++	}
+ 	return x;
+ }
+ 
+@@ -3301,7 +3337,12 @@
+ int cifaddr (int unit, u_int32_t our_adr, u_int32_t his_adr)
+ {
+     struct ifreq ifr;
+-
++    
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    create_msg(BCM_PPPOE_CLIENT_STATE_DOWN, CMSVS_ERROR_UNKNOWN);
++#endif
++    syslog(LOG_CRIT,"Clear IP addresses.  PPP connection DOWN.\n");   
++    
+     if (kernel_version < KVERSION(2,1,16)) {
+ /*
+  *  Delete the route through the device
+
+--- ori_ppp-2.5.0/pppd/options.c	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/options.c	2023-04-18 18:05:36.001418800 +0800
+@@ -108,11 +108,11 @@
+ int	maxconnect = 0;		/* Maximum connect time */
+ char	user[MAXNAMELEN];	/* Username for PAP */
+ char	passwd[MAXSECRETLEN];	/* Password for PAP */
+-bool	persist = 0;		/* Reopen link after it goes down */
++bool	persist = 1;		/* Reopen link after it goes down */
+ char	our_name[MAXNAMELEN];	/* Our name for authentication purposes */
+ bool	demand = 0;		/* do dial-on-demand */
+ int	idle_time_limit = 0;	/* Disconnect if idle for this many seconds */
+-int	holdoff = 30;		/* # seconds to pause before reconnecting */
++int	holdoff = 3;		/* # seconds to pause before reconnecting */
+ bool	holdoff_specified;	/* true if a holdoff value has been given */
+ int	log_to_fd = 1;		/* send log messages to this fd too */
+ bool	log_default = 1;	/* log_to_fd is default (stdout) */
+@@ -146,6 +146,16 @@
+ 
+ extern struct option auth_options[];
+ extern struct stat devstat;
++//brcm
++char oldsession[MAXPATHLEN]="";  /* Mac address and session ID of the previous session */
++char req_name[MAXPATHLEN] = "ppp0";	/* logical name for link */ 
++int isPppoa = 0;             /* flag for pppoa */
++int isPppL2tp = 0;           /* flag for L2TP */
++int isPptp = 0;              /* flag for PPTP */
++int autoscan=0;
++int autoscanP2=0;
++int ipext=0;
++int console = 0;
+ 
+ #ifdef PPP_WITH_FILTER
+ struct	bpf_program pass_filter;/* Filter program for packets to pass */
+@@ -442,7 +452,7 @@
+ int
+ ppp_get_path(ppp_path_t type, char *buf, size_t bufsz)
+ {
+-    const char *path;
++    char *path = NULL;
+ 
+     if (buf && bufsz > 0) {
+         switch (type) {
+@@ -461,6 +471,7 @@
+             path = PPP_PATH_CONFDIR;
+             break;
+         }
++        if(path!=NULL)
+         return strlcpy(buf, path, bufsz);
+     }
+     return -1;
+@@ -469,7 +480,7 @@
+ int
+ ppp_get_filepath(ppp_path_t type, const char *name, char *buf, size_t bufsz)
+ {
+-    const char *path;
++    char *path = NULL;
+ 
+     if (buf && bufsz > 0) {
+         switch (type) {
+@@ -488,6 +499,7 @@
+             path = PPP_PATH_CONFDIR;
+             break;
+         }
++        if(path!=NULL)
+         return slprintf(buf, bufsz, "%s/%s", path, name);
+     }
+     return -1;
+@@ -498,6 +510,66 @@
+     return !!persist;
+ }
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++void read_shell_output(char * cmd, char * out, int len)
++{
++    FILE * fp;
++    char buf[512] = { 0 };
++    char line_buff[128] = { 0 };
++
++    fp = popen(cmd, "r");
++
++    if (fp)
++    {
++        while( fgets(line_buff, sizeof(line_buff), fp) != NULL )
++        {
++            if( (strlen(buf) + strlen(line_buff)) < 512 )
++                strcat( buf, line_buff );
++            else
++                warn("shell output overflow");
++        }
++        strncpy( out, buf, len - 1 );
++        pclose(fp);
++    }
++}
++
++int is_reqname_exist(char *req_name)
++{
++   char cmdStr[BUFLEN_128] = { 0 };
++   char buf[BUFLEN_512] = {0};
++   char *delim = "\n";
++   char *pch, *last = NULL;
++  
++   snprintf(cmdStr, sizeof(cmdStr), "ls /sys/devices/virtual/net");
++   read_shell_output(cmdStr, buf, sizeof(buf));
++   pch = strtok_r(buf, delim, &last);
++   while (pch != NULL)
++   {
++      if(!strcmp(pch, req_name))
++      {
++         warn("%s is already using", req_name);
++         return 1;	  
++      }
++      pch = strtok_r(NULL, delim, &last);
++   }
++   return 0;
++}
++
++int getUnusedIntfindex(char *intfPrefix) 
++{
++   int startNum = 0;
++   int endNum = 10;
++   char intf[16] = { 0 };
++   while (startNum < endNum)
++   {
++      snprintf(intf, sizeof(intf), "%s%d", intfPrefix, startNum);
++      if(!is_reqname_exist(intf))
++         return startNum;
++      startNum++;          
++   }
++   return -1;
++}
++#endif
+ /*
+  * parse_args - parse a string of arguments from the command line.
+  */
+@@ -527,6 +599,10 @@
+ 	}
+ 	if (!process_option(opt, arg, argv))
+ 	    return 0;
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    if(debug && nodetach)
++	    cmsLog_setLevel(LOG_LEVEL_DEBUG);
++#endif        
+ 	argc -= n;
+ 	argv += n;
+     }
+@@ -777,7 +853,11 @@
+     char *optopt = (opt->type == o_wild)? "": " option";
+     int prio = option_priority;
+     struct option *mainopt = opt;
+-
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)    
++    int intfIdx;
++    char prefix[8] = {0};
++    char *pchar;
++#endif 
+     current_option = opt->name;
+     if ((opt->flags & OPT_PRIVFIX) && privileged_option)
+ 	prio += OPRIO_ROOT;
+@@ -894,6 +974,32 @@
+     case o_string:
+ 	if (opt->flags & OPT_STATIC) {
+ 	    strlcpy((char *)(opt->addr), *argv, opt->upper_limit);
++	    if(!strcmp(opt->name, "linkname"))
++	        strcpy(req_name, *argv);
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)	    
++        if( is_reqname_exist(req_name) ) //this req_name is already existed
++        {
++            // get the prefix of the req_name
++            if ((pchar = strchr(req_name, '.')) != NULL)          //pppx.x
++                strncpy(prefix, req_name, (pchar - &req_name[0])+1);
++            else if ((pchar = strchr(req_name, '_')) != NULL)     //pppx_x
++                strncpy(prefix, req_name, (pchar - &req_name[0])+1);
++            else if ((pchar = strstr(req_name, "pppoa")) != NULL) //pppoax
++                strncpy(prefix, req_name, strlen("pppoa"));
++            else
++                strncpy(prefix, req_name, strlen("ppp"));         //pppx
++            
++            // try to get available ppp linkname
++            intfIdx = getUnusedIntfindex(prefix);
++            if( intfIdx < 0 )
++                warn("failed to get available linkname with prefix %s", prefix);              
++            else
++            {
++                sprintf(req_name, "%s%d", prefix, intfIdx);
++                info("get new available linkname %s", req_name);
++            }
++        }
++#endif        	        
+ 	} else {
+ 	    char **optptr = (char **)(opt->addr);
+ 	    sv = strdup(*argv);
+@@ -1006,6 +1112,17 @@
+     extra_options = list;
+ }
+ 
++/********************************************************************
++ *
++ * add_options - backward compatible for pptp.so of accel-pptp-0.8.5
++ * 
++ ********************************************************************/
++void
++add_options(struct option *opt)
++{
++	return ppp_add_options(opt);
++}
++
+ /*
+  * check_options - check that options are valid and consistent.
+  */
+@@ -1792,10 +1909,12 @@
+     vers = (const char *) dlsym(handle, "pppd_version");
+     if (vers == 0) {
+ 	warn("Warning: plugin %s has no version information", arg);
+-    } else if (strcmp(vers, VERSION) != 0) {
+-	ppp_option_error("Plugin %s is for pppd version %s, this is %s",
+-		     arg, vers, VERSION);
+-	goto errclose;
++    }
++    if(!strcmp(LIB_PPTP_PATH, arg) )
++    {
++        printf("PPTP: set devnam as lo\n");
++        strcpy(devnam, LOCALDEV);
++        isPptp = 1; 
+     }
+     info("Plugin %s loaded.", arg);
+     (*init)();
+
+
+
+--- ori_ppp-2.5.0/pppd/main.c	2023-03-25 12:38:30.000000000 +0800
++++ ppp-2.5.0/pppd/main.c	2023-04-20 15:08:25.313601880 +0800
+@@ -82,6 +82,7 @@
+ #include <netdb.h>
+ #include <utmp.h>
+ #include <pwd.h>
++#include <setjmp.h> //brcm
+ #include <sys/param.h>
+ #include <sys/types.h>
+ #include <sys/wait.h>
+@@ -125,6 +126,14 @@
+ #include "atcp.h"
+ #endif
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++#include "cms_msg.h"
++static void *msgHandle=NULL;
++void registerInterestInWanLinkStatus(void);
++void registerInterestInLanLinkStatus(void);
++void unregisterInterestInWanLinkStatus(void); 
++#endif /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */
++
+ /* interface vars */
+ char ifname[IFNAMSIZ];		/* Interface name */
+ int ifunit;			/* Interface unit number */
+@@ -135,6 +144,8 @@
+ char hostname[MAXNAMELEN];	/* Our hostname */
+ static char pidfilename[MAXPATHLEN];	/* name of pid file */
+ static char linkpidfile[MAXPATHLEN];	/* name of linkname pid file */
++//brcm
++char *servicename = NULL; /* service name from the connection */
+ uid_t uid;			/* Our real user-id */
+ struct notifier *pidchange = NULL;
+ struct notifier *phasechange = NULL;
+@@ -145,7 +156,11 @@
+ int hungup;			/* terminal has been hung up */
+ int privileged;			/* we're running as real uid root */
+ int need_holdoff;		/* need holdoff period before restarting */
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++int detached=1;			/* no fork for cms  */
++#else
+ int detached;			/* have detached from terminal */
++#endif
+ volatile int code;		/* exit status for pppd */
+ int unsuccess;			/* # unsuccessful connection attempts */
+ int do_callback;		/* != 0 if we should do callback next */
+@@ -182,7 +197,7 @@
+ 
+ static sigset_t signals_handled;
+ static int waiting;
+-static int sigpipe[2];
++static sigjmp_buf sigjmp;
+ 
+ char **script_env;		/* Env. variable values for scripts */
+ int s_env_nalloc;		/* # words avail at script_env */
+@@ -249,6 +264,10 @@
+ static int reap_kids(void);
+ static void childwait_end(void *);
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++static void termEx __P((int));
++#endif
++
+ #ifdef PPP_WITH_TDB
+ static void update_db_entry(void);
+ static void add_db_key(const char *);
+@@ -259,6 +278,8 @@
+ static void handle_events(void);
+ void print_link_stats(void);
+ 
++//bcrm
++extern	char	*ttyname __P((int));
+ extern	char	*getlogin(void);
+ int main(int, char *[]);
+ 
+@@ -353,6 +374,13 @@
+     NULL
+ };
+ 
++/*
++ * If PPP_DRV_NAME is not defined, use the default "ppp" as the device name.
++ */
++#if !defined(PPP_DRV_NAME)
++#define PPP_DRV_NAME	"ppp"
++#endif /* !defined(PPP_DRV_NAME) */
++
+ int
+ main(int argc, char *argv[])
+ {
+@@ -373,6 +401,7 @@
+ #endif
+     link_stats_valid = 0;
+     link_stats_print = 1;
++    int demandBegin=0;
+     new_phase(PHASE_INITIALIZE);
+ 
+     script_env = NULL;
+@@ -419,11 +448,56 @@
+      * Parse, in order, the system options file, the user's options file,
+      * and the command line arguments.
+      */
++#if 0     
+     if (!ppp_options_from_file(PPP_PATH_SYSOPTIONS, !privileged, 0, 1)
+ 	|| !options_from_user()
+ 	|| !parse_args(argc-1, argv+1))
+ 	exit(EXIT_OPTION_ERROR);
++#endif
++    parse_args(argc-1, argv+1);	
+     devnam_fixed = 1;		/* can no longer change device name */
++    
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++      CmsRet ret;
++      SINT32 count;
++
++      if ((ret = cmsMsg_initWithFlags(EID_PPP, EIF_MULTIPLE_INSTANCES, &msgHandle)) != CMSRET_SUCCESS)
++      {
++         cmsLog_error("cmsMsg_init failed, ret=%d", ret);
++         exit(EXIT_FATAL_ERROR);
++      }
++
++      /* do this only for pppoe */
++      if (!isPppoa)
++      {
++         count = cmsPsp_get(req_name, oldsession, IFC_PPP_SESSION_LEN);
++
++         if (count == IFC_PPP_SESSION_LEN)
++         {
++            /* we can change this back to a cmsLog_debug message once this issue fixed */
++            printf("recovered previous ppp session info %s(%s)\n", req_name, oldsession);
++         }
++         else if (count == 0)
++         {
++            cmsLog_debug("No oldsession info found for %s", req_name);
++         }
++         else
++         {
++            cmsLog_error("error during oldsession scratchpad read key=%s, count=%d, expected=%d", req_name, count, IFC_PPP_SESSION_LEN);
++         }
++      }
++
++      /* register the WAN link status event.  This works for both
++       * ppp over nas and ppp over ethernet. */    
++      //for the ppp connection which was invoked by pptp/l2tp, don't care the wan link status 
++      if(!isPptp && !isPppL2tp)     		   
++         registerInterestInWanLinkStatus();
++ 
++      if( ipext )
++      {
++         registerInterestInLanLinkStatus();
++      }
++#endif  /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */
+ 
+     /*
+      * Work out the device name, if it hasn't already been specified,
+@@ -461,10 +535,14 @@
+     if (!sys_check_options())
+ 	exit(EXIT_OPTION_ERROR);
+     auth_check_options();
++#ifdef HAVE_MULTILINK
+     mp_check_options();
++#endif
++#if 0 //brcm
+     for (i = 0; (protp = protocols[i]) != NULL; ++i)
+ 	if (protp->check_options != NULL)
+ 	    (*protp->check_options)();
++#endif	    
+     if (the_channel->check_options)
+ 	(*the_channel->check_options)();
+ 
+@@ -514,6 +592,13 @@
+      */
+     if (!nodetach && !updetach)
+ 	detach();
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    if (setsid() < 0)
++    {
++        cmsLog_error("could not detach from terminal");
++        exit(-1);
++     }
++#endif	
+     p = getlogin();
+     if (p == NULL) {
+ 	pw = getpwuid(uid);
+@@ -539,6 +624,7 @@
+     /*
+      * If we're doing dial-on-demand, set up the interface now.
+      */
++    //demand = 0;
+     if (demand) {
+ 	/*
+ 	 * Open the loopback channel and set it up to be the ppp interface.
+@@ -549,9 +635,10 @@
+ 	 * Configure the interface and mark it up, etc.
+ 	 */
+ 	demand_conf();
++	info("PPP: doing dial-on-demand ");
+     }
+ 
+-    do_callback = 0;
++    do_callback = 1;
+     for (;;) {
+ 
+ 	bundle_eof = 0;
+@@ -563,7 +650,24 @@
+ 	++unsuccess;
+ 	doing_callback = do_callback;
+ 	do_callback = 0;
+-
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++   if (!autoscan)
++   {
++      while(!link_up(devnam))
++      {
++          cmsLog_debug("waiting for link to come up, devnam=%s", devnam); 
++          sleep(1);
++      }
++   }
++#endif
++    syslog(LOG_NOTICE, "PPP: Start to connect ...\n");	
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	if (ipext && !demandBegin)
++	    while (!lan_link_up())
++		sleep(1);
++#endif
++    demandBegin=0;
++    
+ 	if (demand && !doing_callback) {
+ 	    /*
+ 	     * Don't do anything until we see some activity.
+@@ -571,6 +675,7 @@
+ 	    new_phase(PHASE_DORMANT);
+ 	    demand_unblock();
+ 	    add_fd(fd_loop);
++	    info("PPP idle...");
+ 	    for (;;) {
+ 		handle_events();
+ 		if (asked_to_quit)
+@@ -588,7 +693,8 @@
+ 	    demand_block();
+ 	    info("Starting link");
+ 	}
+-
++    if (!demand && ifunit >= 0)
++	    set_ifunit(1);
+ 	ppp_get_time(&start_time);
+ 	ppp_script_unsetenv("CONNECT_TIME");
+ 	ppp_script_unsetenv("BYTES_SENT");
+@@ -617,7 +723,7 @@
+ 	lcp_close(0, "");
+ 
+ 	if (!persist || asked_to_quit || (maxfail > 0 && unsuccess >= maxfail))
+-	    break;
++	    ;
+ 
+ 	if (demand)
+ 	    demand_discard();
+@@ -664,24 +770,22 @@
+  * handle_events - wait for something to happen and respond to it.
+  */
+ static void
+-handle_events(void)
++handle_events()
+ {
+     struct timeval timo;
+-    unsigned char buf[16];
+ 
+     kill_link = open_ccp_flag = 0;
+-
+-    /* alert via signal pipe */
+-    waiting = 1;
+-    /* flush signal pipe */
+-    for (; read(sigpipe[0], buf, sizeof(buf)) > 0; );
+-    add_fd(sigpipe[0]);
+-    /* wait if necessary */
+-    if (!(got_sighup || got_sigterm || got_sigusr2 || got_sigchld))
+-	wait_input(timeleft(&timo));
++    if (sigsetjmp(sigjmp, 1) == 0) {
++	sigprocmask(SIG_BLOCK, &signals_handled, NULL);
++	if (got_sighup || got_sigterm || got_sigusr2 || got_sigchld) {
++	    sigprocmask(SIG_UNBLOCK, &signals_handled, NULL);
++	} else {
++	    waiting = 1;
++	    sigprocmask(SIG_UNBLOCK, &signals_handled, NULL);
++	    wait_input(timeleft(&timo));
++	}
++    }
+     waiting = 0;
+-    remove_fd(sigpipe[0]);
+-
+     calltimeout();
+     if (got_sighup) {
+ 	info("Hangup (SIGHUP)");
+@@ -689,6 +793,9 @@
+ 	got_sighup = 0;
+ 	if (code != EXIT_HANGUP)
+ 	    code = EXIT_USER_REQUEST;
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++       	create_msg(BCM_PPPOE_REPORT_LASTCONNECTERROR, CMSVS_ERROR_USER_DISCONNECT);
++#endif	
+     }
+     if (got_sigterm) {
+ 	info("Terminating on signal %d", got_sigterm);
+@@ -696,6 +803,9 @@
+ 	asked_to_quit = 1;
+ 	persist = 0;
+ 	code = EXIT_USER_REQUEST;
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++   	create_msg(BCM_PPPOE_REPORT_LASTCONNECTERROR, CMSVS_ERROR_USER_DISCONNECT);
++#endif
+ 	got_sigterm = 0;
+     }
+     if (got_sigchld) {
+@@ -715,15 +825,7 @@
+ setup_signals(void)
+ {
+     struct sigaction sa;
+-
+-    /* create pipe to wake up event handler from signal handler */
+-    if (pipe(sigpipe) < 0)
+-	fatal("Couldn't create signal pipe: %m");
+-    fcntl(sigpipe[0], F_SETFD, fcntl(sigpipe[0], F_GETFD) | FD_CLOEXEC);
+-    fcntl(sigpipe[1], F_SETFD, fcntl(sigpipe[1], F_GETFD) | FD_CLOEXEC);
+-    fcntl(sigpipe[0], F_SETFL, fcntl(sigpipe[0], F_GETFL) | O_NONBLOCK);
+-    fcntl(sigpipe[1], F_SETFL, fcntl(sigpipe[1], F_GETFL) | O_NONBLOCK);
+-
++    
+     /*
+      * Compute mask of all interesting signals and install signal handlers
+      * for each.  Only one signal handler may be active at a time.  Therefore,
+@@ -751,7 +853,9 @@
+ 
+     SIGNAL(SIGUSR1, toggle_debug);	/* Toggle debug flag */
+     SIGNAL(SIGUSR2, open_ccp);		/* Reopen CCP */
+-
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    SIGNAL(SIGWINCH, termEx);		/* terminate ppp gracefully and erase session info in scratch pad (for ppp conn delete) */
++#endif
+     /*
+      * Install a handler for other signals which would otherwise
+      * cause pppd to exit without cleaning up.
+@@ -806,20 +910,19 @@
+ void
+ set_ifunit(int iskey)
+ {
+-    char ifkey[32];
+-
+-    if (req_ifname[0] != '\0')
+-	slprintf(ifname, sizeof(ifname), "%s", req_ifname);
+-    else
+-	slprintf(ifname, sizeof(ifname), "%s%d", PPP_DRV_NAME, ifunit);
+-    info("Using interface %s", ifname);
++// brcm
++    /* req_name is NOW ifname */
++    info("Using interface %s", req_name);
++    slprintf(ifname, sizeof(ifname), "%s", req_name);
+     ppp_script_setenv("IFNAME", ifname, iskey);
++#if 0
+     slprintf(ifkey, sizeof(ifkey), "%d", ifunit);
+     ppp_script_setenv("UNIT", ifkey, iskey);
+     if (iskey) {
+ 	create_pidfile(getpid());	/* write pid to file */
+ 	create_linkpidfile(getpid());
+     }
++#endif
+ }
+ 
+ /*
+@@ -876,8 +979,16 @@
+ void
+ reopen_log(void)
+ {
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    cmsLog_initWithName(EID_PPP, "pppd");
++    // mwang_todo: the log level and destination need to be specified on the command line
++    // For now, set log level to err
++    cmsLog_setLevel(LOG_LEVEL_ERR);
++    cmsLog_notice("cms logging initialized.");
++#else    
+     openlog("pppd", LOG_PID | LOG_NDELAY, LOG_PPP);
+     setlogmask(LOG_UPTO(LOG_INFO));
++#endif /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */    
+ }
+ 
+ /*
+@@ -1246,6 +1357,9 @@
+     cleanup();
+     notify(exitnotify, status);
+     syslog(LOG_INFO, "Exit.");
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++    cmsLog_cleanup();
++#endif    
+     exit(status);
+ }
+ 
+@@ -1516,7 +1630,7 @@
+     if (waiting) {
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wunused-result"
+-	write(sigpipe[1], &sig, sizeof(sig));
++	siglongjmp(sigjmp, 1);
+ #pragma GCC diagnostic pop
+     }
+ }
+@@ -1540,11 +1654,54 @@
+     if (waiting) {
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wunused-result"
+-	write(sigpipe[1], &sig, sizeof(sig));
++	siglongjmp(sigjmp, 1);
+ #pragma GCC diagnostic pop
+     }
+ }
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++/*
++ * termEx - Catch SIGWINCH signal
++ *
++ * Indicates that this ppp connection is being deleted from the
++ * configuration.  Erase the session entry in the scratch pad
++ * and initiate a graceful disconnect and exit.
++ */
++/*ARGSUSED*/
++static void
++termEx(sig)
++    int sig;
++{
++  /* do this only for pppoe */
++   if (!isPppoa)
++   {
++      /* erase the session info for this pvc */
++      if (cmsPsp_set(req_name, "", 0) != CMSRET_SUCCESS)
++      {
++         cmsLog_error("Unable to erase ppp session info from scratch pad");
++      }  
++      else
++      {
++         /* we can change this back to a cmsLog_debug msg once this issue is fixed */
++         printf("SIGWINCH: erasing ppp session info %s\n", req_name);
++      }
++    }  
++
++   /*
++    * mwang 2/14/08: when we get a SIGWINCH, it means that this ppp connection
++    * is being deleted from the configuration.  smd is waiting to collect 
++    * this process, so shorten the holdoff period so that ppp can exit quickly.
++    * From what I can tell, the holdoff is designed to prevent ppp from retrying
++    * connects to the server.  Since ppp is being deleted in this case, holdoff
++    * is not really an issue.  (holdoff is set to 3 in options.c)
++    */
++    holdoff = 1;
++
++    info("Terminating on signal %d.", sig);
++
++    term(SIGTERM);
++}
++#endif  /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */
+ 
+ /*
+  * chld - Catch SIGCHLD signal.
+@@ -1557,7 +1714,7 @@
+     if (waiting) {
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wunused-result"
+-	write(sigpipe[1], &sig, sizeof(sig));
++	siglongjmp(sigjmp, 1);
+ #pragma GCC diagnostic pop
+     }
+ }
+@@ -1594,7 +1751,7 @@
+     if (waiting) {
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wunused-result"
+-	write(sigpipe[1], &sig, sizeof(sig));
++	siglongjmp(sigjmp, 1);
+ #pragma GCC diagnostic pop
+     }
+ }
+@@ -1659,8 +1816,8 @@
+ 	/* Executing in the child */
+ 	ppp_sys_close();
+ #ifdef PPP_WITH_TDB
+-	if (pppdb != NULL)
+-		tdb_close(pppdb);
++	//if (pppdb != NULL)//brcm
++	tdb_close(pppdb);
+ #endif
+ 
+ 	/* make sure infd, outfd and errfd won't get tromped on below */
+@@ -1843,7 +2000,7 @@
+ 		script_env[i] = newstring;
+ 	    else
+ 		add_script_env(i, newstring);
+-	} else if (p != NULL) {
++	} else { //bcrm
+ 	    remove_script_env(i);
+ 	}
+     }
+@@ -2050,7 +2207,7 @@
+ }
+ 
+ /*
+- * add_notifier - add a new function to be called when something happens.
++ * ppp_add_notify - add a new function to be called when something happens.
+  */
+ void
+ ppp_add_notify(ppp_notify_t type, ppp_notify_fn *func, void *arg)
+@@ -2071,6 +2228,22 @@
+ }
+ 
+ /*
++ * add_notifier - backward compatible for pptpd-logwtmp.so of accel-pptp-0.8.5
++ */
++void add_notifier(struct notifier **notif, notify_fngg func, void *arg)
++{
++    struct notifier *np;
++
++    np = malloc(sizeof(struct notifier));
++    if (np == 0)
++	novm("notifier struct");
++    np->next = *notif;
++    np->func = func;
++    np->arg = arg;
++    *notif = np;
++}
++
++/*
+  * remove_notifier - remove a function from the list of things to
+  * be called when something happens.
+  */
+@@ -2323,3 +2496,495 @@
+ 	    delete_db_key(p);
+ }
+ #endif /* PPP_WITH_TDB */
++
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++/* defined in options.c */
++int dslLinkStatus = 0;  /* used by link_up in auth.c */
++
++
++/** Send ppp event message to smd
++ *
++ * @param SINT32 (IN) state  ppp state -- see cms_msg.h for detail
++ * @param char * (IN) ip  if state is BCM_PPPOE_CLIENT_STATE_UP, it contains ppp wan ip info
++ * @param char * (IN) mask  if state is BCM_PPPOE_CLIENT_STATE_UP, it contains pppsubnet mask
++ * @param char * (IN) gateway   if state is BCM_PPPOE_CLIENT_STATE_UP, it contains ppp gateway info
++ * @param char * (IN) nameserver   if state is BCM_PPPOE_CLIENT_STATE_UP, it contains dns info
++ * @param char * (IN) lastconnectionerror    the last error defined by TR98.  
++ *                    For BCM_PPPOE_CLIENT_STATE_UP, it should contain CMSVS_ERROR_NONE.
++ *
++ */
++void sendPppEventMessage(const SINT32 state, 
++                                    const char *ip, 
++                                    const char *mask, 
++                                    const char *gateway, 
++                                    const char *nameserver,
++                                    const char *lastconnectionerror,
++                                    const UINT32 sessionId)
++
++{
++   char buf[sizeof(CmsMsgHeader) + sizeof(PppoeStateChangeMsgBody)]={0};
++   CmsMsgHeader *msg=(CmsMsgHeader *) buf;
++   PppoeStateChangeMsgBody *pppoeBody = (PppoeStateChangeMsgBody *) (msg+1);
++   CmsRet ret;
++   
++   if (console)
++      return;
++
++   cmsLog_debug("%s:  pppd sendPppEventMessage: state=%d, lastConnetionError=%s", req_name, state, lastconnectionerror);
++
++   msg->type = CMS_MSG_PPPOE_STATE_CHANGED; 
++   msg->src = MAKE_SPECIFIC_EID(getpid(), EID_PPP);
++   msg->dst = EID_SSK;
++   msg->flags_event = 1;
++   msg->dataLength = sizeof(PppoeStateChangeMsgBody);
++
++   pppoeBody->pppState = state;
++
++   if (state == BCM_PPPOE_CLIENT_STATE_UP)
++   {
++      pppoeBody->sessionId = sessionId;
++      
++      if (ip != NULL &&
++         mask != NULL &&
++         gateway != NULL &&
++         nameserver != NULL)
++      {
++         strncpy(pppoeBody->ip, ip, sizeof(pppoeBody->ip)-1);
++         strncpy(pppoeBody->mask, mask, sizeof(pppoeBody->mask)-1);
++         strncpy(pppoeBody->gateway, gateway, sizeof(pppoeBody->gateway)-1);
++         strncpy(pppoeBody->nameserver, nameserver, sizeof(pppoeBody->nameserver)-1);
++      }
++      else 
++      {
++         cmsLog_debug("Incomplete ppp info: ip=%s netmask=%s gateway=%s nameserver=%s",
++                      pppoeBody->ip,
++                      pppoeBody->mask,
++                      pppoeBody->gateway,
++                      pppoeBody->nameserver);
++      }
++      
++      if( servicename != NULL )
++          strncpy(pppoeBody->servicename, servicename, sizeof(pppoeBody->servicename)-1);
++          
++   }
++
++   /* lastConnectionError string is alway set now */
++   strncpy(pppoeBody->ppplastconnecterror, lastconnectionerror, sizeof(pppoeBody->ppplastconnecterror)-1);
++      
++   if ((ret = cmsMsg_send(msgHandle, msg)) != CMSRET_SUCCESS)
++   {
++      cmsLog_debug("Could not send out CMS_MSG_PPP_STATE_CHANGED, ret=%d", ret);
++   }
++   else
++   {
++      cmsLog_debug("Sent out CMS_MSG_PPP_STATE_CHANGED, ppState=%d", state);
++   }
++}
++
++void unregisterInterestInWanLinkStatus(void)
++{
++   CmsMsgHeader msg;
++   CmsRet ret;
++   
++   memset(&msg, 0, sizeof(CmsMsgHeader));
++   msg.type = CMS_MSG_UNREGISTER_EVENT_INTEREST;
++   msg.src = MAKE_SPECIFIC_EID(getpid(), EID_PPP);
++   msg.dst = EID_SMD;
++   msg.flags_request = 1;
++   msg.wordData = CMS_MSG_WAN_LINK_UP;
++
++   /* unregister for CMS_MSG_WAN_LINK_UP event */
++   ret = cmsMsg_sendAndGetReply(msgHandle, &msg);
++   if (ret != CMSRET_SUCCESS)
++   {
++      cmsLog_error("WAN link up EVENT_NO_INTEREST for 0x%x failed, ret=%d",  CMS_MSG_WAN_LINK_UP, ret);
++   }
++   else
++   {
++      cmsLog_debug("WAN link up EVENT_NO_INTEREST for 0x%x succeeded", CMS_MSG_WAN_LINK_UP);
++   }
++
++   /* unregister for CMS_MSG_WAN_LINK_DOWN as well */
++   msg.wordData = CMS_MSG_WAN_LINK_DOWN;
++
++   ret = cmsMsg_sendAndGetReply(msgHandle, &msg);
++   if (ret != CMSRET_SUCCESS)
++   {
++      cmsLog_error("WAN link down EVENT_NO_INTEREST for 0x%x failed, ret=%d",  CMS_MSG_WAN_LINK_DOWN, ret);
++   }
++   else
++   {
++      cmsLog_debug("WAN link down EVENT_NO_INTEREST for 0x%x succeeded", CMS_MSG_WAN_LINK_DOWN);
++   }
++
++   return;
++}
++
++
++/** Send IPv6CP event message to smd
++ *
++ * @param SINT32 (IN) state  ppp state -- see cms_msg.h for detail
++ * @param char * (IN) localIntfId  if state is BCM_PPPOE_CLIENT_IPV6_STATE_UP
++ * @param char * (IN) remoteIntfId  if state is BCM_PPPOE_CLIENT_IPV6_STATE_UP
++ * @param char * (IN) lastconnectionerror    the last error defined by TR98.  
++ *                    For BCM_PPPOE_CLIENT_IPV6_STATE_UP, it should contain CMSVS_ERROR_NONE.
++ *
++ */
++void sendIPv6CPEventMessage(SINT32 state, 
++                            const char *localIntfId,
++                            const char *remoteIntfId, 
++                            const char *lastconnectionerror)
++
++{
++   char buf[sizeof(CmsMsgHeader) + sizeof(PppoeStateChangeMsgBody)]={0};
++   CmsMsgHeader *msg=(CmsMsgHeader *) buf;
++   PppoeStateChangeMsgBody *pppoeBody = (PppoeStateChangeMsgBody *) (msg+1);
++   CmsRet ret;
++   
++   if (console)
++      return;
++
++   cmsLog_debug("%s:  pppd sendIPv6CPEventMessage: state=%d, lastConnetionError=%s", req_name, state, lastconnectionerror);
++
++   msg->type = CMS_MSG_PPPOE_STATE_CHANGED; 
++   msg->src = MAKE_SPECIFIC_EID(getpid(), EID_PPP);
++   msg->dst = EID_SSK;
++   msg->flags_event = 1;
++   msg->dataLength = sizeof(PppoeStateChangeMsgBody);
++
++   pppoeBody->pppState = state;
++
++   if (state == BCM_PPPOE_CLIENT_IPV6_STATE_UP)
++   {
++      if (localIntfId != NULL && remoteIntfId != NULL)
++      {
++         strncpy(pppoeBody->localIntfId, localIntfId, sizeof(pppoeBody->localIntfId)-1);
++         strncpy(pppoeBody->remoteIntfId, remoteIntfId, sizeof(pppoeBody->remoteIntfId)-1);
++      }
++      else 
++      {
++         cmsLog_debug("Incomplete ipv6cp info: local=%s remote=%s", localIntfId, remoteIntfId);
++      }
++   }
++
++   /* lastConnectionError string is alway set now */
++   strncpy(pppoeBody->ppplastconnecterror, lastconnectionerror, sizeof(pppoeBody->ppplastconnecterror)-1);
++      
++   if ((ret = cmsMsg_send(msgHandle, msg)) != CMSRET_SUCCESS)
++   {
++      cmsLog_debug("Could not send out CMS_MSG_PPP_STATE_CHANGED, ret=%d", ret);
++   }
++   else
++   {
++      cmsLog_debug("Sent out CMS_MSG_PPP_STATE_CHANGED, ppState=%d", state);
++   }
++}
++
++
++/** Register the interest in WAN link status event with smd.
++ *
++ * ppp needs to know if WAN link is up or down before starting its 
++ * protocol state machine.
++ * 
++ */
++void registerInterestInWanLinkStatus(void)
++{
++   CmsMsgHeader msg;
++   CmsRet ret;
++   
++   memset(&msg, 0, sizeof(CmsMsgHeader));
++   msg.type = CMS_MSG_REGISTER_EVENT_INTEREST;
++   msg.src = MAKE_SPECIFIC_EID(getpid(), EID_PPP);
++   msg.dst = EID_SMD;
++   msg.flags_request = 1;
++   msg.wordData = CMS_MSG_WAN_LINK_UP;
++
++   /* register for CMS_MSG_WAN_LINK_UP event */
++   ret = cmsMsg_sendAndGetReply(msgHandle, &msg);
++   if (ret != CMSRET_SUCCESS)
++   {
++      cmsLog_error("WAN link up EVENT_INTEREST for 0x%x failed, ret=%d",  CMS_MSG_WAN_LINK_UP, ret);
++   }
++   else
++   {
++      cmsLog_debug("WAN link up EVENT_INTEREST for 0x%x succeeded", CMS_MSG_WAN_LINK_UP);
++   }
++
++   /* register for CMS_MSG_WAN_LINK_DOWN as well */
++    msg.wordData = CMS_MSG_WAN_LINK_DOWN;
++ 
++   ret = cmsMsg_sendAndGetReply(msgHandle, &msg);
++   if (ret != CMSRET_SUCCESS)
++   {
++      cmsLog_error("WAN link down EVENT_INTEREST for 0x%x failed, ret=%d",  CMS_MSG_WAN_LINK_DOWN, ret);
++   }
++   else
++   {
++      cmsLog_debug("WAN link down EVENT_INTEREST for 0x%x succeeded", CMS_MSG_WAN_LINK_DOWN);
++   }
++
++   return;
++}
++
++/** Register the interest in LAN link status event with smd.
++ *
++ * ppp IP extension needs to know if LAN link is up or down before starting its 
++ * protocol state machine.
++ * 
++ */
++void registerInterestInLanLinkStatus(void)
++{
++   CmsMsgHeader msg;
++   CmsRet ret;
++   
++   memset(&msg, 0, sizeof(CmsMsgHeader));
++   msg.type = CMS_MSG_REGISTER_EVENT_INTEREST;
++   msg.src = MAKE_SPECIFIC_EID(getpid(), EID_PPP);
++   msg.dst = EID_SMD;
++   msg.flags_request = 1;
++   msg.wordData = CMS_MSG_ETH_LINK_UP;
++
++   /* register for CMS_MSG_ETH_LINK_UP event */
++   ret = cmsMsg_sendAndGetReply(msgHandle, &msg);
++   if (ret != CMSRET_SUCCESS)
++   {
++      cmsLog_error("Ethernet link up EVENT_INTEREST for 0x%x failed, ret=%d", CMS_MSG_ETH_LINK_UP, ret);
++   }
++   else
++   {
++      cmsLog_debug("Ethernet link up EVENT_INTEREST for 0x%x succeeded", CMS_MSG_ETH_LINK_UP);
++   }
++
++   /* register for CMS_MSG_ETH_LINK_DOWN as well */
++    msg.wordData = CMS_MSG_ETH_LINK_DOWN;
++ 
++   ret = cmsMsg_sendAndGetReply(msgHandle, &msg);
++   if (ret != CMSRET_SUCCESS)
++   {
++      cmsLog_error("Ethernet link down EVENT_INTEREST for 0x%x failed, ret=%d", CMS_MSG_ETH_LINK_DOWN, ret);
++   }
++   else
++   {
++      cmsLog_debug("Ethernet link down EVENT_INTEREST for 0x%x succeeded", CMS_MSG_ETH_LINK_DOWN);
++   }
++
++   msg.wordData = CMS_MSG_USB_LINK_UP;
++
++   /* register for CMS_MSG_USB_LINK_UP event */
++   ret = cmsMsg_sendAndGetReply(msgHandle, &msg);
++   if (ret != CMSRET_SUCCESS)
++   {
++      cmsLog_error("USB link up EVENT_INTEREST for 0x%x failed, ret=%d", CMS_MSG_USB_LINK_UP, ret);
++   }
++   else
++   {
++      cmsLog_debug("USB link up EVENT_INTEREST for 0x%x succeeded", CMS_MSG_USB_LINK_UP);
++   }
++
++   /* register for CMS_MSG_USB_LINK_DOWN as well */
++    msg.wordData = CMS_MSG_USB_LINK_DOWN;
++ 
++   ret = cmsMsg_sendAndGetReply(msgHandle, &msg);
++   if (ret != CMSRET_SUCCESS)
++   {
++      cmsLog_error("USB link down EVENT_INTEREST for 0x%x failed, ret=%d", CMS_MSG_USB_LINK_DOWN, ret);
++   }
++   else
++   {
++      cmsLog_debug("USB link down EVENT_INTEREST for 0x%x succeeded", CMS_MSG_USB_LINK_DOWN);
++   }
++
++   return;
++}
++
++/** 
++ *
++ * Return the WAN link status.  1 is up, 0 is down
++ * 
++ */
++SINT32 isWanLinkUp(char *deviceName)
++{
++   CmsRet ret;
++   static SINT32 wanLinkUp = 0;
++   static SINT32 manualState = 1; // set up/down manually
++   CmsMsgHeader *msg;
++   void *msgBuf;
++   UINT32 msgDataLen = 0;
++   char *data;
++   static UBOOL8 firstTime = TRUE;
++   CmsMsgHeader *msgPtr=NULL;
++   
++   if (firstTime)
++   {
++      /*
++       * On first check, send a link status request to ssk
++       * and get a response.
++       */
++      if (NULL == deviceName)
++      {
++         cmsLog_error("got a NULL deviceName!");
++         return 0;
++      }
++
++      msgDataLen = strlen(deviceName) + 1;
++      msgBuf = cmsMem_alloc(sizeof(CmsMsgHeader) + msgDataLen, ALLOC_ZEROIZE);
++      if (NULL == msgBuf)
++      {
++         cmsLog_error("Could not allocate msgLen %d", msgDataLen);
++         return 0;
++      }
++
++      msg = (CmsMsgHeader *)msgBuf;
++      msg->type = CMS_MSG_GET_WAN_LINK_STATUS;
++      msg->src = MAKE_SPECIFIC_EID(getpid(), EID_PPP);
++      msg->dst = EID_SSK;
++      msg->flags_request = 1;
++
++      data = (char *) (msg + 1);
++      msg->dataLength = msgDataLen;
++      strcpy(data, deviceName);
++      
++      ret = cmsMsg_sendAndGetReply(msgHandle, msg);
++
++      if (ret == WAN_LINK_UP)
++      {
++         wanLinkUp = 1;
++      }
++
++      firstTime = FALSE;
++
++      cmsLog_debug("Initial WAN Link status=%d", wanLinkUp);
++
++      CMSMEM_FREE_BUF_AND_NULL_PTR(msgBuf);
++   }
++   else
++   {
++      /*
++       * On subsequent checks, just see if smd sent us any link
++       * status changed messages.  We use a timeout of 0 on
++       * this call so that if there is no messages for us,
++       * we don't block waiting for a message. 
++       * Use a while loop so that if there are multiple link status
++       * change messages, we get the last one.
++       * The intent of this block is NOT to send out a link status
++       * request and get a link status response.
++       */
++
++      while ((ret = cmsMsg_receiveWithTimeout(msgHandle, &msgPtr, 0)) == CMSRET_SUCCESS)
++      {
++         if (msgPtr->type == CMS_MSG_WAN_LINK_UP)
++         {
++            wanLinkUp = 1;
++         }
++         else if (msgPtr->type == CMS_MSG_WAN_LINK_DOWN)
++         {
++            /* data points to the base layer 2 interface name. eg. atm0, eth0, moca, etc. */
++            data = (char *) (msgPtr + 1);
++            cmsLog_debug("%s:  devnam %s got CMS_MSG_WAN_LINK_DOWN for layer 2 interface %s", req_name, devnam, data);
++
++            /* Need to make sure this wan link down msg is for this device.  Here devnam is the  layer 2 (with vlan ext. - atm0.1)
++            * and data points to the base layer 2 - atm0
++            */
++            if (cmsUtl_strstr(devnam, data))
++            {
++               wanLinkUp = 0;
++            }               
++         }
++         else if (msgPtr->type == CMS_MSG_SET_PPP_UP)
++         {
++            manualState = 1;
++         }
++         else if (msgPtr->type == CMS_MSG_SET_PPP_DOWN)
++         {
++            manualState = 0;
++         }
++ 
++         CMSMEM_FREE_BUF_AND_NULL_PTR(msgPtr);
++
++         cmsLog_debug("%s: WAN Link status=%d", req_name, wanLinkUp);
++      }
++   }
++   
++   return (wanLinkUp & manualState);
++} 
++   
++/** 
++ * Return the LAN link status.  1 is up, 0 is down
++ */
++SINT32 isLanLinkUp()
++{
++   CmsRet ret;
++   static SINT32 lanLinkUp = 0;
++   CmsMsgHeader *msg;
++   void *msgBuf;
++   UINT32 msgDataLen = 0;
++   static UBOOL8 firstTime = TRUE;
++   CmsMsgHeader *msgPtr=NULL;
++
++   if (firstTime)
++   {
++      /*
++       * On first check, send a link status request to ssk
++       * and get a response.
++       */
++      msgBuf = cmsMem_alloc(sizeof(CmsMsgHeader) + msgDataLen, ALLOC_ZEROIZE);
++      if (NULL == msgBuf)
++      {
++         cmsLog_error("Could not allocate msgLen %d", msgDataLen);
++         return 0;
++      }
++
++      msg = (CmsMsgHeader *)msgBuf;
++      msg->type = CMS_MSG_GET_LAN_LINK_STATUS;
++      msg->src = MAKE_SPECIFIC_EID(getpid(), EID_PPP);
++      msg->dst = EID_SSK;
++      msg->flags_request = 1;
++      msg->dataLength = msgDataLen;
++      
++      ret = cmsMsg_sendAndGetReply(msgHandle, msg);
++
++      if (ret == LAN_LINK_UP)
++      {
++         lanLinkUp = 1;
++      }
++
++      firstTime = FALSE;
++
++      cmsLog_debug("Initial LAN Link status=%d", lanLinkUp);
++
++      CMSMEM_FREE_BUF_AND_NULL_PTR(msgBuf);
++   }
++   else
++   {
++      /*
++       * On subsequent checks, just see if smd sent us any link
++       * status changed messages.  We use a timeout of 0 on
++       * this call so that if there is no messages for us,
++       * we don't block waiting for a message. 
++       * Use a while loop so that if there are multiple link status
++       * change messages, we get the last one.
++       * The intent of this block is NOT to send out a link status
++       * request and get a link status response.
++       */
++      while ((ret = cmsMsg_receiveWithTimeout(msgHandle, &msgPtr, 0)) == CMSRET_SUCCESS)
++      {
++         if ((msgPtr->type == CMS_MSG_ETH_LINK_UP) || 
++             (msgPtr->type == CMS_MSG_USB_LINK_UP))
++         {
++            lanLinkUp = 1;
++         }
++         else if ((msgPtr->type == CMS_MSG_ETH_LINK_DOWN) || 
++                  (msgPtr->type == CMS_MSG_USB_LINK_DOWN))
++         {
++            lanLinkUp = 0;
++         }
++ 
++         CMSMEM_FREE_BUF_AND_NULL_PTR(msgPtr);
++
++         cmsLog_debug("LAN Link status=%d", lanLinkUp);
++      }
++   }
++   
++   return lanLinkUp;
++} 
++#endif /* BRCM_CMS_BUILD || BRCM_BDK_BUILD */
+

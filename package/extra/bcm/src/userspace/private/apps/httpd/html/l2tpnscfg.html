@@ -1,0 +1,289 @@
+<html>
+   <head>
+      <meta HTTP-EQUIV='Pragma' CONTENT='no-cache'>
+      <link rel="stylesheet" href='stylemain.css' type='text/css'>
+         <link rel="stylesheet" href='colors.css' type='text/css'>
+            <script language="javascript" src="util.js"></script>
+            <script language="javascript">
+<!-- hide
+
+function l2tpNsClick(cb) {
+   if ( cb.checked == true )
+      hideNameInfo(0);
+   else
+      hideNameInfo(1);
+}
+   
+function hideNameInfo(hide) {
+   var status = 'visible';
+
+   if ( hide == 1 )
+      status = 'hidden';
+   if (document.getElementById)  // DOM3 = IE5, NS6
+      document.getElementById('hideinfo').style.visibility = status;
+   else {
+      if (document.layers == false) // IE4
+         document.all.hideinfo.style.visibility = status;
+   }
+}
+
+function hideApplyBtn(hide) {
+   var status = 'visible';
+
+   if ( hide == 1 )
+      status = 'hidden';
+   if (document.getElementById)  // DOM3 = IE5, NS6
+      document.getElementById('hidebtnApply').style.visibility = status;
+   else {
+      if (document.layers == false) // IE4
+         document.all.hideinfo.style.visibility = status;
+   }
+}
+
+function btnApplySave() {
+   var loc = 'l2tpnswan.cmd?';  
+   with ( document.forms[0] ) {
+     if (chkl2tpns.checked == true)
+        loc += 'enblL2tpNs=1';
+     else
+        loc += 'enblL2tpNs=0';
+     loc += '&l2tpnsname=' + l2tpnsname.value;   
+     if (!isValidIpAddress(l2tpnslocalip.value)) {
+        alert('L2TP Server Local Ip "' + l2tpnslocalip.value + '" is invalid.');
+        return;
+     }
+     else
+        loc += '&l2tpnslocalip=' + l2tpnslocalip.value;
+     
+     loc += '&peerstartip=' + peerstartip.value;
+     loc += '&peerendip=' + peerendip.value;       
+     loc += '&l2tpnsusername=' + l2tpnsusername.value;
+     loc += '&l2tpnspassword=' + l2tpnspassword.value;
+     
+     if (enablechap.checked == true)
+        loc += '&enblCHAP=1';
+     else
+        loc += '&enblCHAP=0';
+     if (enablepap.checked == true)
+        loc += '&enblPAP=1';
+     else
+        loc += '&enblPAP=0';
+     if (enablemschap.checked == true)
+        loc += '&enblMSCHAP=1';
+     else
+        loc += '&enblMSCHAP=0';
+     if (enablemschapv2.checked == true)
+        loc += '&enblMSCHAPv2=1';
+     else
+        loc += '&enblMSCHAPv2=0';
+     if (enablelenbit.checked == true)
+        loc += '&enblLenBit=1';
+     else
+        loc += '&enblLenBit=0';
+
+   }
+   
+   loc += '&sessionKey=<%ejGetOther(sessionKey)%>';
+   var code = 'location="' + loc + '"';
+   eval(code);
+   hideApplyBtn(1);
+}
+
+
+function frmLoad() {
+   with ( document.forms[0] ) {
+      var l2tpNsInfo = '';
+      l2tpNsInfo = '<%ejGetOther(l2tpNsWanInfo)%>';
+      var l2tpNS = l2tpNsInfo.split('|');
+
+      if (l2tpNS[0] == 1)
+      {
+         chkl2tpns.checked = true;
+         hideNameInfo(0);
+      }
+      else 
+      {
+         chkl2tpns.checked = false;
+         hideNameInfo(1);
+      }
+      
+      hideApplyBtn(0);
+      l2tpnsname.value =     l2tpNS[1];
+      l2tpnslocalip.value =  l2tpNS[2];
+      peerstartip.value =    l2tpNS[3];
+      peerendip.value =      l2tpNS[4];
+      l2tpnsusername.value = l2tpNS[5];
+      l2tpnspassword.value = l2tpNS[6];
+      
+      if (l2tpNS[7] == 1)
+         enablechap.checked = true;
+      else   
+         enablechap.checked = false;
+         
+      if (l2tpNS[8] == 1)
+         enablepap.checked = true;
+      else   
+         enablepap.checked = false;
+
+      if (l2tpNS[9] == 1)
+         enablemschap.checked = true;
+      else   
+         enablemschap.checked = false;
+         
+      if (l2tpNS[10] == 1)
+         enablemschapv2.checked = true;
+      else   
+         enablemschapv2.checked = false;
+         
+      if (l2tpNS[11] == 1)
+         enablelenbit.checked = true;
+      else   
+         enablelenbit.checked = false;
+   }
+}
+
+function setDhcpAddresses() {
+   var ipArr = [0, 0, 0, 0],  maskArr = [0, 0, 0, 0], startArr = [0, 0, 0, 0],  endArr = [0, 0, 0, 0];
+
+   with ( document.forms[0] ) {
+      lanIp = l2tpnslocalip.value;
+      subnetMask = "255.255.255.0";
+      if ( isValidIpAddress(lanIp) == false ) {
+         alert('Address "' + lanIp + '" is invalid IP address.');
+         return;
+      }
+      if ( isValidIpAddress(subnetMask) == false ) {
+         alert('Address "' + subnetMask + '" is invalid IP address.');
+         return;
+      }
+      addrParts = lanIp.split('.');
+      maskParts = subnetMask.split('.');
+      if ( addrParts.length != 4 || maskParts.length != 4) {
+         alert('Invalid ip/subnetMask');
+         return;
+      }
+      for (i = 0; i < 4; i++) {
+        ipArr[i] = parseInt(addrParts[i]);
+        startArr[i] = parseInt(addrParts[i]);
+        endArr[i] = parseInt(addrParts[i]);
+        maskArr[i] = parseInt(maskParts[i]);
+      }
+      m3 = maskArr[3];
+      bcast = 255;
+      n3 = 0;
+      if (maskArr[0] == 255 && maskArr[1] == 0 &&  maskArr[2] == 0 && maskArr[3] == 0) {
+        /* 255.0.0.0 is only class A supported */
+        endArr[1] = 255;
+        endArr[2] = 255;
+      }
+      else if (maskArr[0] == 255 && maskArr[1] == 255 &&  maskArr[2] == 0 && maskArr[3] == 0) 
+        /* 255.255.0.0 is only class B supported */
+        endArr[2] = 255;
+      else if ((maskArr[0] == 255 && maskArr[1] == 255 &&  maskArr[2] == 255 ) &&
+               (m3 == 0 || m3 == 128 || m3 == 192 || m3 == 224 || m3== 240 || m3 == 248 ||  m3 == 252)) {
+        /* 255.255.255.0/128/192... class C supported */
+        n3 = ipArr[3] & m3;
+        hosts = 255 - m3;
+        bcast = n3 + hosts;
+      }
+      else {
+        alert("Only support subnet mask: Class A: 255.0.0.0; Class B: 255.255.0.0 and Class C: 255.255.255.0/255.255.255.128/255.255.255.192/255.255.255.224/255.255.255.240/255.255.255.248/255.255.255.252.");
+        return;
+      }
+      if (ipArr[3] == bcast) {
+        alert('Ip address cannot be same as the broadcast ip address.');
+        return;
+      }
+      peerstartip.value = peerendip.value = "";      
+      for (i = 0; i < 3; i++) {
+         peerstartip.value = peerstartip.value + startArr[i] + ".";
+         peerendip.value = peerendip.value + endArr[i] + ".";
+      }
+      if (ipArr[3] == (bcast-1)) {
+        startArr[3] = n3 + 1;
+        endArr[3] = bcast -2;
+      }
+      else {
+        startArr[3] = ipArr[3] + 1;
+        endArr[3] = bcast -1;
+      }
+      peerstartip.value = peerstartip.value + startArr[3];
+      peerendip.value = peerendip.value + endArr[3];
+   }
+}
+
+
+// done hiding -->
+</script>
+   </head>
+   <body onLoad='frmLoad()'>
+      <blockquote>
+         <form>
+            <P>
+               <b>L2TP Server Configuration</b><br><br>
+            </P>
+
+            <tr>
+               <td colspan="2">
+                  <input type='checkbox' name='chkl2tpns' onClick='l2tpNsClick(this)'></td>
+               <td>
+                    Enable L2TP Server</td>
+            </tr>
+            <br>
+            <br>
+            <div id='hideinfo'>
+               <table>
+               <tr>
+                  <td>L2TP LNS Name:</td>
+                  <td><input type='text' name='l2tpnsname'></td>
+               </tr>	   
+               <tr>
+                  <td>L2TP Server Local Ip:</td>
+                  <td><input type='text' name='l2tpnslocalip' onChange='setDhcpAddresses()'></td>
+               </tr>
+               <tr>
+                  <td>Peer Start IP Address:</td>
+                  <td><input type='text' name='peerstartip'></td>
+               </tr>
+               <tr>
+                  <td>Peer End IP Address:</td>
+                  <td><input type='text' name='peerendip'></td>
+               </tr>
+               <tr>
+                  <td>L2TP Server Username:</td>
+                  <td><input type='text' name='l2tpnsusername'></td>
+               </tr>
+               <tr>
+                  <td>L2TP Server Password:</td>
+                  <td><input type='text' name='l2tpnspassword'></td>
+               </tr>
+               <tr>
+                  <td><input type="checkbox" name="enablechap"> CHAP Enabled</td>
+               </tr>
+               <tr>
+                  <td><input type="checkbox" name="enablepap"> PAP Enabled</td>
+               </tr>
+               <tr>
+                  <td><input type="checkbox" name="enablemschap"> MSCHAP Enabled</td>
+               </tr>
+               <tr>
+                  <td><input type="checkbox" name="enablemschapv2"> MSCHAPv2 Enabled</td>
+               </tr>
+               <tr>
+                  <td><input type="checkbox" name="enablelenbit"> LengthBit Enabled</td>
+               </tr>
+               </table>
+            </div>
+            <br>
+            <br>
+            <div id='hidebtnApply'>
+            <center>
+               <input type='button' onClick='btnApplySave()' value='Apply/Save'>
+            </center>
+            </div>
+         </form>
+      </blockquote>
+   </body>
+</html>
+
+

@@ -1,0 +1,27 @@
+--- lzo-2.10/lzotest/lzotest.c.orig	2023-11-01 16:14:04.053509593 +0200
++++ lzo-2.10/lzotest/lzotest.c	2023-11-01 16:16:17.437457701 +0200
+@@ -354,6 +354,9 @@
+         fprintf(stderr, "%s: out of memory (wanted %lu bytes)\n", progname, (unsigned long)mb->alloc_len);
+         exit(EXIT_MEM);
+     }
++
++    lzo_memset(mb->alloc_ptr,0,mb->alloc_len);
++
+     if (mb->alloc_len >= align && __lzo_align_gap(mb->alloc_ptr, align) != 0) {
+         fprintf(stderr, "%s: C library problem: malloc() returned misaligned pointer!\n", progname);
+         exit(EXIT_MEM);
+--- ./lzo-2.10/examples/portab.h.orig	2023-11-01 16:37:02.501005584 +0200
++++ ./lzo-2.10/examples/portab.h	2023-11-01 16:37:06.980003922 +0200
+@@ -130,6 +130,12 @@
+         printf("%s: out of memory\n", progname);
+         exit(1);
+     }
++
++    if(len>0)
++        lzo_memset(p,0,len);
++    else
++        lzo_memset(p,0,1);
++
+     if (len >= align && __lzo_align_gap(p, align) != 0)
+     {
+         printf("%s: C library problem: malloc() returned misaligned pointer!\n", progname);

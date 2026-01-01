@@ -1,0 +1,39 @@
+OBJS := event.o \
+        md5.o \
+        protocol.o \
+        utils.o \
+        wget.o \
+        www.o
+
+
+CFLAGS += -Werror -Wfatal-errors
+# for dealing with 64 bit int/pointer field in CmsMsgHeader
+CFLAGS += -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
+
+
+# These are public API headers needed by other apps which want to call this lib.
+# Private/internal headers should not be listed here.
+HEADERS := bcm_webproto.h
+
+all: $(LIB)
+	mkdir -p $(HEADER_INSTALL_DIR)
+	install -p -m 444 -t $(HEADER_INSTALL_DIR) $(addprefix $(mdir)/,$(HEADERS))
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive
+
+
+clean:
+	rm -f *.o *.d $(LIB)
+	rm -f $(LIB_INSTALL_DIR)/$(LIB)
+	rm -f $(addprefix $(HEADER_INSTALL_DIR)/,$(HEADERS))
+
+binaryonly_prepare:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

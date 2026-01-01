@@ -1,0 +1,19 @@
+--- ori_util-linux-2.39/misc-utils/waitpid.c	2023-03-23 23:21:32.612173861 +0800
++++ util-linux-2.39/misc-utils/waitpid.c	2023-05-19 10:58:33.978476704 +0800
+@@ -49,6 +49,15 @@
+ static bool allow_exited = false;
+ static size_t count;
+ 
++#ifndef __NR_pidfd_open
++#define __NR_pidfd_open 434   /* System call # on most architectures */
++#endif
++
++static int pidfd_open(pid_t pid, unsigned int flags)
++{
++	return syscall(__NR_pidfd_open, pid, flags);
++}
++
+ static pid_t *parse_pids(size_t n_strings, char * const *strings)
+ {
+ 	pid_t *pids = xcalloc(n_strings, sizeof(*pids));
+

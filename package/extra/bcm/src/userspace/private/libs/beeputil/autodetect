@@ -1,0 +1,2 @@
+condition: ifneq ($(strip $(BUILD_MODSW_EE)),)
+dependson: public/libs/curl public/libs/jsonc

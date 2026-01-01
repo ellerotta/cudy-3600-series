@@ -1,0 +1,20 @@
+-include $(PROJECT_DIR)/$(RDP_TARGET)/rdpa/make.proj_xrdp_basic_set_objs
+-include $(PROJECT_DIR)/$(RDP_TARGET)/rdpa/make.spdsvc_objs
+-include $(PROJECT_DIR)/$(RDP_TARGET)/rdpa/make.dhd_helper_objs
+-include $(PROJECT_DIR)/$(RDP_TARGET)/rdpa/make.xpon_objs
+-include $(PROJECT_DIR)/$(RDP_TARGET)/rdpa/make.xtm_objs
+
+RDPA_OBJS += rdpa_vlan_action.o
+RDPA_OBJS += rdpa_vlan_action_ex.o
+RDPA_OBJS += rdpa_l2_common.o
+RDPA_OBJS += rdpa_l2_ucast.o
+RDPA_OBJS += rdpa_cmd_list.o
+RDPA_OBJS += rdpa_ucast.o
+RDPA_OBJS += rdpa_ucast_ex.o
+RDPA_OBJS += rdpa_mcast.o
+RDPA_OBJS += rdpa_mcast_common.o
+RDPA_OBJS += rdpa_mcast_dsl.o
+RDPA_OBJS += rdpa_mcast_ex.o
+RDPA_OBJS += rdpa_mcast_whitelist.o
+RDPA_OBJS += rdpa_mcast_whitelist_ex.o
+

@@ -1,0 +1,71 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>MQTT Client Subscriptions</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+
+      function addClick() {
+        var loc = 'mqttclntsubscfg.cgi?uspAction=add';
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function editClick(val) {
+        var loc = 'mqttclntsubscfg.cgi?uspAction=edit&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function removeClick(rml) {
+        var lst = '';
+
+        if (rml.length > 0)
+          for (i = 0; i < rml.length; i++) {
+            if ( rml[i].checked == true )
+              lst += rml[i].value + '|';
+          }
+        else if ( rml.checked == true )
+          lst = rml.value;
+
+        var loc = 'mqttclntsubstbl.cgi?uspAction=remove&uspInfo=' + lst;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+    </script>
+  </head>
+  <body>
+  <form>
+    <center><h3>MQTT Client Subscriptions</h3><br>
+    <div><center>
+    <table id='mqttclntsubsTbl' border='1' cellpadding='4' cellspacing='0'>
+      <tbody>
+        <tr align='center'>
+          <td class='hd'>Client Name</td>
+          <td class='hd'>Subscription Alias</td>
+          <td class='hd'>Enable</td>
+          <td class='hd'>Topic</td>
+          <td class='hd'>QoS</td>
+          <td class='hd'>Status</td>
+          <td class='hd'>Edit</td>
+          <td class='hd'>Remove</td>
+        </tr>
+<%ejGetOther(uspGetMqttClientSubsTable)%>
+      </tbody>
+    </table>
+    <br><br>
+    <input type='button' value='Add' onclick='addClick()'>
+    <input type='button' value='Remove' onclick='removeClick(this.form.rml)'>
+    <br><br>
+    </div>
+  </form>
+  </body>
+</html>

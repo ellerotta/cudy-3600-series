@@ -1,0 +1,56 @@
+#!/bin/sh
+# Copyright (C) 2020 OpenWrt.org BRCM
+
+do_prepare_rootfsvol() {
+	# 1.nand mtd*
+	# 2.emmc mmcblk0p*
+	# 3.smc flash-*
+	local _root_fs_dev=`/etc/get_rootfs_dev.sh`
+	if [[ ! -z $(echo $_root_fs_dev|grep ubi) ]]; then
+		grep -q 'rootfs_data' /proc/mtd && VOLEXIST=true && export VOLEXIST
+		if [ "$VOLEXIST" != "true" ]; then
+			echo "- add ubi volume for rootfs_data -"
+			ubimkvol /dev/ubi0 -s 20MiB -N rootfs_data -n 20
+			echo "- reboot -"
+			reboot
+		else
+			echo "- nand ubi volume 20 as rootfs_data already exist -"
+		fi
+	elif [[ ! -z $(echo $_root_fs_dev|grep mmcblk)  ]]; then 
+		grep -q 'rootfs_data' /sys/block/mmcblk0/mmcblk0p10/uevent && VOLEXIST=true && export VOLEXIST
+		if [ "$VOLEXIST" != "true" ]; then
+			echo "- add emmc partition for rootfs_data -"
+			sgdisk -n 10:0:+100MiB -t 0:0700 -c 0:rootfs_data /dev/mmcblk0
+			partprobe -s /dev/mmcblk0
+			mke2fs  -I 256 -b 4096 -t ext4 -F /dev/mmcblk0p10
+			echo "- reboot -"
+			reboot
+		else
+			echo "- emmc partition 10 as rootfs_data already exist -"
+		fi
+	elif [[ ! -z $(echo $_root_fs_dev|grep flash-)  ]]; then 
+		grep -q 'rootfs_data' /proc/partitions && VOLEXIST=true && export VOLEXIST
+		if [ "$VOLEXIST" != "true" ]; then
+			echo "- add vfbio partition for rootfs_data -"
+			vfbio_lvm create -s 100m -l 20 -n rootfs_data
+			vfbio_lvm info -l 20
+			mke2fs  -I 256 -b 4096 -t ext4 -F /dev/flash-rootfs_data
+			if [ ! $? -eq 0 ]; then
+				echo "- reboot -"
+				reboot
+			fi
+		else
+			echo "- smc partition 20 as rootfs_data already exist -"
+			mkdir -p /tmp/testroot
+			mount -t ext4 -rw /dev/flash-rootfs_data /tmp/testroot
+			if [ ! $? -eq 0 ]; then
+				echo "- Formatting SMC flash-rootfs_data Partition <<<<<"
+				mke2fs  -I 256 -b 4096 -t ext4 -F /dev/flash-rootfs_data
+			else
+				umount /dev/flash-rootfs_data
+			fi
+		fi
+	fi
+}
+
+boot_hook_add preinit_main do_prepare_rootfsvol

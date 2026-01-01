@@ -1,0 +1,74 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Controller Trust Role Permissions</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+
+      function addClick() {
+        var loc = 'ctrolepercfg.cgi?uspAction=add';
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function editClick(val) {
+        var loc = 'ctrolepercfg.cgi?uspAction=edit&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function removeClick(rml) {
+        var lst = '';
+
+        if (rml.length > 0)
+          for (i = 0; i < rml.length; i++) {
+            if ( rml[i].checked == true )
+              lst += rml[i].value + '|';
+          }
+        else if ( rml.checked == true )
+          lst = rml.value;
+
+        var loc = 'ctrolepertbl.cgi?uspAction=remove&uspInfo=' + lst;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+    </script>
+  </head>
+  <body>
+  <form>
+    <center><h3>Controller Trust Role Permissions</h3><br>
+    <div><center>
+    <table id='ctrPerTbl' border='1' cellpadding='4' cellspacing='0'>
+      <tbody>
+        <tr align='center'>
+          <td class='hd'>Role Name</td>
+          <td class='hd'>Permission Alias</td>
+          <td class='hd'>Enable</td>
+          <td class='hd'>Order</td>
+          <td class='hd'>Targets</td>
+          <td class='hd'>Param</td>
+          <td class='hd'>Obj</td>
+          <td class='hd'>Instantiated Obj</td>
+          <td class='hd'>Command Event</td>
+          <td class='hd'>Edit</td>
+          <td class='hd'>Remove</td>
+        </tr>
+<%ejGetOther(uspGetCTRPermissionTable)%>
+      </tbody>
+    </table>
+    <br><br>
+    <input type='button' value='Add' onclick='addClick()'>
+    <input type='button' value='Remove' onclick='removeClick(this.form.rml)'>
+    <br><br>
+    </div>
+  </form>
+  </body>
+</html>

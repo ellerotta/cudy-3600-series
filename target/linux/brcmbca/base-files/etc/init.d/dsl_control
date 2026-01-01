@@ -1,0 +1,9 @@
+#!/bin/sh /etc/rc.common
+
+EXTRA_COMMANDS="status lucistat"
+EXTRA_HELP="    status Get DSL status information
+    lucistat Get status information in lua friendly format"
+
+
+[ -f /lib/functions/bcm_dsl.sh ] && . /lib/functions/bcm_dsl.sh
+

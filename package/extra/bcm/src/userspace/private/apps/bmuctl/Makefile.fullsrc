@@ -1,0 +1,93 @@
+EXE  = bmuctl
+LIBS = $(CMS_COMMON_LIBS) -lcms_msg
+
+OBJS = bmuctl.o
+
+
+all dynamic install: conditional_build
+
+clean:
+	rm -f $(INSTALL_DIR)/bin/bmuctl
+	rm -f $(INSTALL_DIR)/bin/bmu
+	rm -f $(EXE)
+	find . -name "*.[od]" -exec rm -f {} \;
+	find . -name "*.d.[0-9]*" -exec rm -f {} \;
+
+
+binaryonly_dist_clean: clean generic_binaryonly_dist_clean
+	rm -f Makefile.fullsrc
+
+
+ifeq ($(BCM_MODULAR_BUILD),)
+# Old way: infer location of make.common based on pwd.
+CURR_DIR := $(shell pwd)
+BUILD_DIR:=$(subst /userspace, /userspace,$(CURR_DIR))
+BUILD_DIR:=$(word 1, $(BUILD_DIR))
+include $(BUILD_DIR)/make.common
+else
+# New Modular Build way: EXT_BUILD_DIR must be set.
+# Also point BUILD_DIR to EXT_BUILD_DIR
+BUILD_DIR := $(EXT_BUILD_DIR)
+include $(EXT_BUILD_DIR)/make.common
+endif
+
+
+#
+# Private apps and libs are allowed to include header files from the
+# private and public directories.
+#
+# WARNING: Do not modify this section unless you understand the
+# license implications of what you are doing.
+#
+ALLOWED_INCLUDE_PATHS += -I. \
+                         -I$(BCM_FSBUILD_DIR)/include  \
+                         -I$(BCM_FSBUILD_DIR)/public/include  \
+                         -I$(BCM_FSBUILD_DIR)/shared/opensource/include/$(BRCM_BOARD) \
+                         -I$(BCM_FSBUILD_DIR)/bcmdrivers/include \
+                         -I$(BUILD_DIR)/userspace/private/include  \
+                         -I$(BUILD_DIR)/userspace/private/include/$(OALDIR)
+
+# obviously, this app needs to access kernel headers
+#ALLOWED_INCLUDE_PATHS += -I$(INC_BRCMDRIVER_PUB_PATH)/$(BRCM_BOARD)  \
+#                         -I$(INC_BRCMDRIVER_PRIV_PATH)/$(BRCM_BOARD) \
+#                         -I$(INC_BRCMSHARED_PUB_PATH)/$(BRCM_BOARD)  \
+#                         -I$(INC_BRCMSHARED_PRIV_PATH)/$(BRCM_BOARD)
+
+
+#
+# Private apps and libs are allowed to link with libraries from the
+# private and public directories.
+#
+# WARNING: Do not modify this section unless you understand the
+# license implications of what you are doing.
+#
+ALLOWED_LIB_DIRS := /lib:/lib/private:/lib/public
+
+
+# treat all warnings as errors
+CUSTOM_CFLAGS += -Werror -Wfatal-errors
+
+
+#
+# Implicit rule will make the .c into a .o
+# Implicit rule is $(CC) -c $(CPPFLAGS) $(CFLAGS)
+# See Section 10.2 of Gnu Make manual
+# 
+bmuctl: $(OBJS)
+	$(CC) $(BCM_LD_FLAGS) -o $@ $(OBJS) $(CMS_RPATH_OPTION) $(CMS_LIB_PATH) $(LIBS)
+
+
+ifneq ($(strip $(BUILD_BMU)),)
+conditional_build: $(EXE)
+	install -m 755 $(EXE) $(INSTALL_DIR)/bin
+	$(STRIP) $(INSTALL_DIR)/bin/bmuctl
+	ln -sf bmuctl $(INSTALL_DIR)/bin/bmu
+else
+conditional_build:
+	@echo "Skipping BMUD (not configured)"
+endif
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

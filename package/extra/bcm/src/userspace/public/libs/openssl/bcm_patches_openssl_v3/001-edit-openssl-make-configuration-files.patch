@@ -1,0 +1,69 @@
+--- ori_openssl-3.1.4/build.info	2023-10-24 21:01:49.000000000 +0800
++++ openssl-3.1.4/build.info	2023-10-24 10:37:21.382749702 +0800
+@@ -1,7 +1,7 @@
+ # Note that some of these directories are filtered in Configure.  Look for
+ # %skipdir there for further explanations.
+ 
+-SUBDIRS=crypto ssl apps util tools fuzz providers doc
++SUBDIRS=crypto ssl apps tools providers
+ IF[{- !$disabled{tests} -}]
+   SUBDIRS=test
+ ENDIF
+
+
+--- ori_openssl-3.1.4/Configurations/10-main.conf	2023-10-24 21:01:49.000000000 +0800
++++ openssl-3.1.4/Configurations/10-main.conf	2023-10-24 11:09:16.705627855 +0800
+@@ -771,6 +771,18 @@
+         asm_arch         => 'armv4',
+         perlasm_scheme   => "linux32",
+     },
++    "linux-bcmmips" => {
++        inherit_from     => [ "linux-latomic" ],
++        asm_arch         => 'mips32',
++        cflags           => add("-D_REENTRANT -D_XOPEN_SOURCE=500 -D_BSD_SOURCE"),
++        perlasm_scheme   => "o32",
++    },
++    "linux-bcmarm" => {
++        inherit_from     => [ "linux-latomic" ],
++        asm_arch         => 'armv4',
++        cflags           => add("-D_REENTRANT"),
++        perlasm_scheme   => "linux32",
++    },
+     "linux-aarch64" => {
+         inherit_from     => [ "linux-generic64" ],
+         asm_arch         => 'aarch64',
+
+
+--- ori_openssl-3.1.4/Configurations/unix-Makefile.tmpl	2023-10-24 21:41:51.000000000 +0800
++++ openssl-3.1.4/Configurations/unix-Makefile.tmpl	2023-10-25 11:04:00.713272178 +0800
+@@ -305,7 +305,7 @@
+ libdir={- file_name_is_absolute($libdir)
+           ? $libdir : '$(INSTALLTOP)/$(LIBDIR)' -}
+ ENGINESDIR=$(libdir)/engines-{- $sover_dirname -}
+-MODULESDIR=$(libdir)/ossl-modules
++MODULESDIR=/lib
+ 
+ # Convenience variable for those who want to set the rpath in shared
+ # libraries and applications
+@@ -335,7 +335,7 @@
+ 
+ CROSS_COMPILE={- $config{CROSS_COMPILE} -}
+ CC=$(CROSS_COMPILE){- $config{CC} -}
+-CXX={- $config{CXX} ? "\$(CROSS_COMPILE)$config{CXX}" : '' -}
++CXX={- $config{CXX} -}
+ CPPFLAGS={- our $cppflags1 = join(" ",
+                                   (map { "-D".$_} @{$config{CPPDEFINES}}),
+                                   (map { "-I".$_} @{$config{CPPINCLUDES}}),
+@@ -349,9 +349,9 @@
+ 
+ PERL={- $config{PERL} -}
+ 
+-AR=$(CROSS_COMPILE){- $config{AR} -}
++AR={- $config{AR} -}
+ ARFLAGS= {- join(' ', @{$config{ARFLAGS}}) -}
+-RANLIB={- $config{RANLIB} ? "\$(CROSS_COMPILE)$config{RANLIB}" : "true"; -}
++RANLIB={- $config{RANLIB} -}
+ RC= $(CROSS_COMPILE){- $config{RC} -}
+ RCFLAGS={- join(' ', @{$config{RCFLAGS}}) -} {- $target{shared_rcflag} -}
+
+ 

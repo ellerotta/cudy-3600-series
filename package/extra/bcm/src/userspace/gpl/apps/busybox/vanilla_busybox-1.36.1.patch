@@ -1,0 +1,71 @@
+diff -Nurp busybox-1.36.0.orig/coreutils/date.c busybox-1.36.0/coreutils/date.c
+--- busybox-1.36.0.orig/coreutils/date.c	2023-01-03 22:17:01.000000000 +0800
++++ busybox-1.36.0/coreutils/date.c	2023-01-31 14:48:20.882481913 +0800
+@@ -287,10 +287,12 @@ int date_main(int argc UNUSED_PARAM, cha
+ 		ts.tv_sec = validate_tm_time(date_str, &tm_time);
+ 		ts.tv_nsec = 0;
+ 
++#ifndef DESKTOP_LINUX
+ 		/* if setting time, set it */
+ 		if ((opt & OPT_SET) && clock_settime(CLOCK_REALTIME, &ts) < 0) {
+ 			bb_simple_perror_msg("can't set date");
+ 		}
++#endif
+ 	}
+ 
+ 	/* Display output */
+diff -Nurp busybox-1.36.0.orig/Makefile busybox-1.36.0/Makefile
+--- busybox-1.36.0.orig/Makefile	2023-01-03 22:17:01.000000000 +0800
++++ busybox-1.36.0/Makefile	2023-01-31 14:48:20.882481913 +0800
+@@ -294,7 +294,13 @@ LD		= $(CC) -nostdlib
+ CPP		= $(CC) -E
+ AR		= $(CROSS_COMPILE)ar
+ NM		= $(CROSS_COMPILE)nm
++# brcm begin
++ifneq ($(strip $(DESKTOP_LINUX)),)
++STRIP		= strip
++else
+ STRIP		= $(CROSS_COMPILE)strip
++endif
++# brcm end
+ OBJCOPY		= $(CROSS_COMPILE)objcopy
+ OBJDUMP		= $(CROSS_COMPILE)objdump
+ PKG_CONFIG	?= $(CROSS_COMPILE)pkg-config
+diff -Nurp busybox-1.36.0.orig/Makefile.flags busybox-1.36.0/Makefile.flags
+--- busybox-1.36.0.orig/Makefile.flags	2023-01-03 22:17:01.000000000 +0800
++++ busybox-1.36.0/Makefile.flags	2023-01-31 14:48:20.898483176 +0800
+@@ -103,6 +103,14 @@ CFLAGS += $(call cc-option,-fsanitize=le
+ CFLAGS += $(call cc-option,-fsanitize=undefined,)
+ endif
+ 
++# brcm begin
++ifneq ($(strip $(DESKTOP_LINUX)),)
++CFLAGS += -DDESKTOP_LINUX $(BCM_LD_FLAGS)
++LDFLAGS += $(BCM_LD_FLAGS)
++endif
++# brcm end
++
++
+ # If arch/$(ARCH)/Makefile did not override it (with, say, -fPIC)...
+ ARCH_FPIC ?= -fpic
+ ARCH_FPIE ?= -fpie
+diff -Nurp busybox-1.36.1.orig/networking/traceroute.c busybox-1.36.1/networking/traceroute.c
+--- busybox-1.36.1.orig/networking/traceroute.c      2023-11-22 13:42:15.455615046 +0800
++++ busybox-1.36.1/networking/traceroute.c   2023-11-22 13:43:55.217075783 +0800
+@@ -883,6 +883,7 @@ traceroute_init(int op, char **argv)
+ 	char *pausemsecs_str;
+ 	char *first_ttl_str;
+ 	char *dest_str;
++	int sobuflen = 8192;
+ #if ENABLE_TRACEROUTE6
+ 	sa_family_t af;
+ #else
+@@ -1008,7 +1009,7 @@ traceroute_init(int op, char **argv)
+ 	}
+ 
+ #ifdef SO_SNDBUF
+-	if (setsockopt_SOL_SOCKET_int(sndsock, SO_SNDBUF, packlen) != 0) {
++	if (setsockopt_SOL_SOCKET_int(sndsock, SO_SNDBUF, sobuflen) != 0) {
+ 		bb_perror_msg_and_die("setsockopt(%s)", "SO_SNDBUF");
+ 	}
+ #endif

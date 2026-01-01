@@ -1,0 +1,54 @@
+diff -Naurp getdns-1.6.0/stubby/CMakeLists.txt getdns-1.6.0_modify/stubby/CMakeLists.txt
+--- getdns-1.6.0/stubby/CMakeLists.txt	2020-02-28 22:38:41.000000000 +0800
++++ getdns-1.6.0_modify/stubby/CMakeLists.txt	2020-12-21 18:36:16.000000000 +0800
+@@ -38,6 +38,9 @@ if (Libsystemd_FOUND)
+   option(ENABLE_SYSTEMD "Enable systemd support." ON)
+ endif()
+ 
++# BRCM
++set(CMAKE_INSTALL_FULL_RUNSTATEDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/run")
++
+ # Directories
+ if (DEFINED CMAKE_INSTALL_FULL_RUNSTATEDIR)
+   set(RUNSTATEDIR "${CMAKE_INSTALL_FULL_RUNSTATEDIR}")
+@@ -51,7 +54,9 @@ install(DIRECTORY
+   GROUP_READ GROUP_EXECUTE
+   WORLD_READ WORLD_EXECUTE
+   )
+-set(STUBBYCONFDIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}/stubby")
++# BRCM
++#set(STUBBYCONFDIR "${CMAKE_INSTALL_FULL_SYSCONFDIR}/stubby")
++set(STUBBYCONFDIR "${CMAKE_INSTALL_LOCALSTATEDIR}")
+ 
+ find_package(Libyaml REQUIRED)
+ 
+--- getdns-1.7.2/CMakeLists.txt      2022-08-20 02:00:36.000000000 +0800
++++ getdns/CMakeLists.txt      2022-11-25 09:50:01.203997660 +0800
+@@ -1,4 +1,4 @@
+-cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
++cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+
+ if (POLICY CMP0075)
+   cmake_policy(SET CMP0075 NEW)
+@@ -1061,8 +1061,6 @@ foreach (man ${mans})
+ endforeach()
+
+ set(prefix ${CMAKE_INSTALL_PREFIX})
+-cmake_path(APPEND libdir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_LIBDIR}")
+-cmake_path(APPEND includedir_for_pc_file "\${prefix}" "${CMAKE_INSTALL_INCLUDEDIR}")
+ configure_file(getdns.pc.in getdns.pc @ONLY)
+
+ # Installing.
+--- getdns-1.7.2/getdns.pc.in        2022-08-20 02:00:36.000000000 +0800
++++ getdns/getdns.pc.in        2022-11-25 09:51:58.438972022 +0800
+@@ -1,7 +1,7 @@
+ prefix=@prefix@
+ exec_prefix=${prefix}
+-libdir=@libdir_for_pc_file@
+-includedir=@includedir_for_pc_file@
++libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
++includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+ Name: getdns
+ Version: @GETDNS_VERSION@
+

@@ -1,0 +1,66 @@
+--- samba/source/configure.in	2010-09-13 22:49:26.000000000 -0700
++++ samba/source/configure.in	2022-11-01 13:30:16.248070000 -0700
+@@ -998,12 +998,26 @@
+     AC_TRY_LINK([
+ #include <stdio.h>],
+ [
+-		if (0) {
+-		   this_function_does_not_exist();
+-		} else {
+-		  return 1;
++		#include <sys/types.h>
++		size_t __unsafe_string_function_usage_here_size_t__(void);
++		#define CHECK_STRING_SIZE(d, len) (sizeof(d) != (len) && sizeof(d) != sizeof(char *))
++		static size_t push_string_check_fn(void *dest, const char *src, size_t dest_len) {
++			return 0;
+ 		}
+ 
++		#define push_string_check(dest, src, dest_len) \
++		    (CHECK_STRING_SIZE(dest, dest_len) \
++		    ? __unsafe_string_function_usage_here_size_t__()	\
++		    : push_string_check_fn(dest, src, dest_len))
++
++		int main(int argc, char **argv) {
++		    char outbuf[1024];
++		    char *p = outbuf;
++		    const char *foo = "bar";
++		    p += 31 + push_string_check(p + 31, foo, sizeof(outbuf) - (p + 31 - outbuf));
++		    return 0;
++		 }
++
+ ],
+ 	samba_cv_optimize_out_funcation_calls=yes,samba_cv_optimize_out_funcation_calls=no)])
+ if test x"$samba_cv_optimize_out_funcation_calls" = x"yes"; then
+--- samba/source/configure	2010-09-13 22:49:26.000000000 -0700
++++ samba/source/configure	2022-11-01 13:30:36.528860962 -0700
+@@ -29207,12 +29207,26 @@
+ main ()
+ {
+ 
+-		if (0) {
+-		   this_function_does_not_exist();
+-		} else {
+-		  return 1;
++		#include <sys/types.h>
++		size_t __unsafe_string_function_usage_here_size_t__(void);
++		#define CHECK_STRING_SIZE(d, len) (sizeof(d) != (len) && sizeof(d) != sizeof(char *))
++		static size_t push_string_check_fn(void *dest, const char *src, size_t dest_len) {
++			return 0;
+ 		}
+ 
++		#define push_string_check(dest, src, dest_len) \
++		    (CHECK_STRING_SIZE(dest, dest_len) \
++		    ? __unsafe_string_function_usage_here_size_t__()	\
++		    : push_string_check_fn(dest, src, dest_len))
++
++		int main(int argc, char **argv) {
++		    char outbuf[1024];
++		    char *p = outbuf;
++		    const char *foo = "bar";
++		    p += 31 + push_string_check(p + 31, foo, sizeof(outbuf) - (p + 31 - outbuf));
++		    return 0;
++		 }
++
+ 
+   ;
+   return 0;

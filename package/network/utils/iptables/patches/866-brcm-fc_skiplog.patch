@@ -1,0 +1,167 @@
+--- /dev/null
++++ b/extensions/libxt_SKIPLOG.c
+@@ -0,0 +1,51 @@
++/* Shared library add-on to iptables to add SKIPLOG target support. */
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++#include <getopt.h>
++
++#include <xtables.h>
++#include <linux/netfilter/x_tables.h>
++
++/* Function which prints out usage message. */
++static void SKIPLOG_help(void)
++{
++	printf(
++"SKIPLOG target v%s takes no options\n",
++XTABLES_VERSION);
++}
++
++/* Function which parses command options; returns true if it
++   ate an option */
++static int
++SKIPLOG_parse(int c, char **argv, int invert, unsigned int *flags,
++              const void *entry, struct xt_entry_target **target)
++{
++	return 0;
++}
++
++static struct xtables_target skiplog_target = {
++	.family		= AF_INET,
++	.name		= "SKIPLOG",
++	.version	= XTABLES_VERSION,
++	.size		= XT_ALIGN(0),
++	.userspacesize	= XT_ALIGN(0),
++	.help		= SKIPLOG_help,
++	.parse		= SKIPLOG_parse,
++};
++
++static struct xtables_target skiplog_target6 = {
++	.family		= AF_INET6,
++	.name		= "SKIPLOG",
++	.version	= XTABLES_VERSION,
++	.size		= XT_ALIGN(0),
++	.userspacesize	= XT_ALIGN(0),
++	.help		= SKIPLOG_help,
++	.parse		= SKIPLOG_parse,
++};
++
++void _init(void)
++{
++	xtables_register_target(&skiplog_target);
++	xtables_register_target(&skiplog_target6);
++}
+--- /dev/null
++++ b/extensions/libxt_blog.c
+@@ -0,0 +1,85 @@
++/* Shared library add-on to iptables to add blog match support. */
++#include <stdbool.h>
++#include <stdio.h>
++#include <netdb.h>
++#include <string.h>
++#include <stdlib.h>
++#include <getopt.h>
++#include <netinet/in.h>
++#include <xtables.h>
++#include <linux/netfilter/xt_blog.h>
++
++static void blog_match_help(void)
++{
++	printf(
++"blog match options:\n"
++"[!] --tcp-pureack              match when blog TCP Pure ACK is\n"
++"                               detected.\n");
++}
++
++static const struct option blog_match_opts[] = {
++	{.name = "tcp-pureack",      .has_arg = false, .val = '1'},
++	XT_GETOPT_TABLEEND,
++};
++
++static int
++blog_match_parse(int c, char **argv, int invert, unsigned int *flags,
++          const void *entry, struct xt_entry_match **match)
++{
++	struct xt_blog *bloginfo = (struct xt_blog *)(*match)->data;
++
++	switch (c) {
++	case '1':
++		bloginfo->tcp_pure_ack = 1;
++		bloginfo->invert = invert;
++		break;
++	}
++
++	return 1;
++}
++
++static void
++blog_match_print(const void *ip, const struct xt_entry_match *match, int numeric)
++{
++	const struct xt_blog *bloginfo = (struct xt_blog *)match->data;
++
++	printf(" blog");
++	if (bloginfo->tcp_pure_ack)
++		printf(" TCP Pure ACK");
++	if (bloginfo->invert)
++		printf(" not detected");
++	else
++		printf(" detected");
++}
++
++static void
++blog_match_save(const void *ip, const struct xt_entry_match *match)
++{
++	const struct xt_blog *bloginfo = (struct xt_blog *)match->data;
++
++	printf(" blog");
++	if (bloginfo->tcp_pure_ack) {
++		if (bloginfo->invert)
++			printf(" !");
++		printf(" --tcp-pureack ");
++	}
++}
++
++static struct xtables_match blog_match = {
++	.family		= NFPROTO_UNSPEC,
++	.name		= "blog",
++	.version	= XTABLES_VERSION,
++	.size		= XT_ALIGN(sizeof(struct xt_blog)),
++	.userspacesize	= XT_ALIGN(sizeof(struct xt_blog)),
++	.help		= blog_match_help,
++	.parse		= blog_match_parse,
++	.print		= blog_match_print,
++	.save		= blog_match_save,
++	.extra_opts	= blog_match_opts,
++};
++
++void
++_init(void)
++{
++	xtables_register_match(&blog_match);
++}
+--- /dev/null
++++ b/include/linux/netfilter/xt_blog.h
+@@ -0,0 +1,11 @@
++#ifndef _XT_BLOG_H
++#define _XT_BLOG_H
++
++#include <linux/types.h>
++
++struct xt_blog {
++    __u8 tcp_pure_ack;
++    __u8 invert;
++};
++
++#endif /*_XT_BLOG_H*/
+--- a/extensions/GNUmakefile.in
++++ b/extensions/GNUmakefile.in
+@@ -64,6 +64,8 @@ else
+ @ENABLE_STATIC_TRUE@ pf6_build_static := $(pf6_build_mod)
+ endif
+ 
++pfx_build_static += blog SKIPLOG
++
+ pfx_build_mod := $(filter-out $(pfx_build_static),$(pfx_build_mod))
+ pfb_build_mod := $(filter-out $(pfb_build_static),$(pfb_build_mod))
+ pfa_build_mod := $(filter-out $(pfa_build_static),$(pfa_build_mod))

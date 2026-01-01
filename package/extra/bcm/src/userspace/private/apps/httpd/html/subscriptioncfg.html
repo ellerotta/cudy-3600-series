@@ -1,0 +1,236 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Subscription Configuration</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'subscriptioncfg.cgi?';
+        var num = 0;
+
+        // validate ID
+        num = document.getElementById('ID').value.length;
+        if (num > 255) {
+          alert('ID is too long. Max length is 255.');
+          return;
+        }
+        if (document.getElementById('ID').value == '') {
+          alert('ID cannot be empty.');
+          return;
+        }
+        // validate Reference List
+        num = document.getElementById('refList').value.length;
+        if (num > 1024) {
+          alert('Reference list is too long. Max length is 1024.');
+          return;
+        }
+        if (document.getElementById('refList').value == '') {
+          alert('Reference list cannot be empty.');
+          return;
+        }
+        // validate Time To Live
+        if (isNaN(document.getElementById('timeToLive').value)) {
+          alert('Time to live is not a number.');
+          return;
+        }
+        // validate Notify Expiration
+        if (isNaN(document.getElementById('notifyExpiration').value)) {
+          alert('Notify expiration is not a number.');
+          return;
+        }
+        // validate Recipient
+        if (document.getElementById('recipient').value == '') {
+          alert('Recipient cannot be empty.');
+          return;
+        }
+        // validate Notify Type
+        if (document.getElementById('notifyType').value == '') {
+          alert('Notify type cannot be empty.');
+          return;
+        }
+        
+        // Enable Subscription
+        if (document.getElementById('enable-1').checked)
+          val += '1,';
+        else
+          val += '0,';
+        // Alias
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split(',');
+            val += info[1] + ',';
+          } else
+            val += ',';
+        } else
+          val += ',';
+        // ID
+        val += document.getElementById('ID').value + ',';
+        // Recipient
+        val += document.getElementById('recipient').value + ',';
+        // Reference List
+        val += document.getElementById('refList').value + ',';
+        // Persistent
+        if (document.getElementById('persistent-1').checked)
+          val += '1,';
+        else
+          val += '0,';
+        // Time To Live
+        val += document.getElementById('timeToLive').value + ',';
+        // Notify Type
+        val += document.getElementById('notifyType').value + ',';
+        // Notify Retry
+        if (document.getElementById('retry-1').checked)
+          val += '1,';
+        else
+          val += '0,';
+        // Notify Expiration
+        val += document.getElementById('notifyExpiration').value;
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function bodyLoad() {
+        var recipient = document.getElementById('recipient');
+        var type = document.getElementById('notifyType');
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split(',');
+            // Enable Subscription
+            if (info[0] == 'Yes')
+              document.getElementById('enable-1').checked = true;
+            else
+              document.getElementById('enable-0').checked = true;
+            // Alias
+            // ID
+            document.getElementById('ID').value = info[2];
+            // Recipient
+            recipient.value = info[3];
+            // Reference List
+            document.getElementById('refList').value = info[4];
+            // Persistent
+            if (info[5] == 'Yes')
+              document.getElementById('persistent-1').checked = true;
+            else
+              document.getElementById('persistent-0').checked = true;
+            // Time To Live
+            document.getElementById('timeToLive').value = info[6];
+            // Notify Type
+            type.value = info[7];
+            // Notify Retry
+            if (info[8] == 'Yes')
+              document.getElementById('retry-1').checked = true;
+            else
+              document.getElementById('retry-0').checked = true;
+            // Notify Expiration
+            document.getElementById('notifyExpiration').value = info[9];
+          }
+
+          // Disable ID
+          document.getElementById('ID').disabled = true;
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          // Disable Subscripton
+          document.getElementById('enable-0').checked = true;
+          // Disable Persistent
+          document.getElementById('persistent-0').checked = true;
+          // Disable Notify Retry
+          document.getElementById('retry-0').checked = true;
+          // Time To Live
+          document.getElementById('timeToLive').value = '0';
+          // Notify Expiration
+          document.getElementById('notifyExpiration').value = '0';
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>Subscription Configuration</h3>
+    Subscription entry is configured by the Controller. This page is used to simulate this step.<br>
+    Reboot is required for subscription entry to take effect in the uspagent.<br>
+    The ID of the subscription needs to be unique in the controller's name space.<br><br>
+    <div>
+    <table border='1' cellpadding='4' cellspacing='0'>
+      <tbody>
+        <tr>
+          <td class='hd'>Enable Subscription</td>
+          <td><input name='enable' id='enable-0' type='radio'>  Disable</td>
+          <td><input name='enable' id='enable-1' type='radio'>  Enable</td>
+        </tr>
+        <tr>
+          <td class='hd'>Persistent</td>
+          <td><input name='persistent' id='persistent-0' type='radio'>  No</td>
+          <td><input name='persistent' id='persistent-1' type='radio'>  Yes</td>
+        </tr>
+        <tr height='25'>
+        </tr>
+        <tr>
+          <td class='hd'>ID</td>
+          <td colspan='2'><input type='text' id='ID'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Recipient</td>
+          <td colspan='2'>
+            <select id='recipient'>
+              <option value=''></option>
+<%ejGetOther(uspGetCntrlAliasList)%>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td class='hd'>Reference List</td>
+          <td colspan='2'><input type='text' id='refList'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Time To Live (seconds)</td>
+          <td colspan='2'><input type='text' id='timeToLive'></td>
+        </tr>
+        <tr height='25'>
+        </tr>
+        <tr>
+          <td class='hd'>Notify Type</td>
+          <td colspan='2'>
+            <select id='notifyType'>
+              <option value=''></option>
+              <option value='ValueChange'>ValueChange</option>
+              <option value='ObjectCreation'>ObjectCreation</option>
+              <option value='ObjectDeletion'>ObjectDeletion</option>
+              <option value='OperationComplete'>OperationComplete</option>
+              <option value='Event'>Event</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <td class='hd'>Notify Retry</td>
+          <td><input name='retry' id='retry-0' type='radio'>  No</td>
+          <td><input name='retry' id='retry-1' type='radio'>  Yes</td>
+        </tr>
+        <tr>
+          <td class='hd'>Notify Expiration (seconds)</td>
+          <td colspan='2'><input type='text' id='notifyExpiration'></td>
+        </tr>
+      </tbody>
+    </table>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+    </div>
+  </form>
+  </body>
+</html>

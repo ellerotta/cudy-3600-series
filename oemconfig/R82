@@ -1,0 +1,108 @@
+
+CONFIG_TARGET_brcmbca=y
+CONFIG_TARGET_brcmbca_bcm96764=y
+CONFIG_TARGET_brcmbca_bcm96764_DEVICE_R82=y
+CONFIG_TARGET_BOARD="brcmbca"
+CONFIG_TARGET_SUBTARGET="bcm96764"
+CONFIG_TARGET_PROFILE="DEVICE_R82"
+CONFIG_TARGET_ARCH_PACKAGES="arm_cortex-a7"
+CONFIG_DEFAULT_TARGET_OPTIMIZATION="-Os -pipe"
+CONFIG_CPU_TYPE="cortex-a7"
+# CONFIG_USER_ARCH_ARM is not set
+CONFIG_USER_ARCH_ARM_SOFTFP=y
+# CONFIG_USER_ARCH_AARCH64 is not set
+CONFIG_BCM_CHIP_ID=6764
+CONFIG_BCM_PROFILE="96764GW_WL23D2D1GA_WLMLO"
+CONFIG_BCM_WLIMPL=105
+CONFIG_LINUX_4_19=y
+CONFIG_arm=y
+CONFIG_ARCH="arm"
+
+CONFIG_PACKAGE_bcm-bootloader=y
+
+#
+# Stripping options
+#
+# CONFIG_NO_STRIP is not set
+CONFIG_USE_STRIP=y
+CONFIG_STRIP_ARGS="--strip-all"
+
+CONFIG_USE_LIBSTDCXX=y
+
+CONFIG_DEVEL=y
+
+CONFIG_LOCALMIRROR=""
+
+CONFIG_EXTERNAL_KERNEL_TREE="$(TOPDIR)/package/extra/bcm/src/kernel/linux-4.19"
+
+CONFIG_EXTERNAL_TOOLCHAIN=y
+# CONFIG_NATIVE_TOOLCHAIN is not set
+CONFIG_TARGET_NAME="arm-buildroot-linux-gnueabi"
+CONFIG_TOOLCHAIN_PREFIX="arm-buildroot-linux-gnueabi-"
+CONFIG_TOOLCHAIN_ROOT="$(TOPDIR)/build_dir/toolchains/crosstools-arm_softfp-gcc-10.3-linux-4.19-glibc-2.32-binutils-2.36.1"
+CONFIG_EXTERNAL_TOOLCHAIN_LIBC_USE_GLIBC=y
+
+CONFIG_TOOLCHAIN_LIBC="glibc"
+CONFIG_TOOLCHAIN_BIN_PATH="./usr/bin ./bin"
+CONFIG_TOOLCHAIN_INC_PATH="./usr/include ./include"
+CONFIG_TOOLCHAIN_LIB_PATH="./arm-buildroot-linux-gnueabi/sysroot/usr/lib ./arm-buildroot-linux-gnueabi/sysroot/lib"
+CONFIG_TOOLCHAIN_BCM_PATH="$(TOPDIR)/package/extra//bcm/toolchains"
+
+CONFIG_GCC_LIBSSP=y
+
+CONFIG_USE_GLIBC=y
+CONFIG_SSP_SUPPORT=y
+CONFIG_USE_EXTERNAL_LIBC=y
+CONFIG_BINUTILS_VERSION_2_31_1=y
+CONFIG_BINUTILS_VERSION="2.31.1"
+CONFIG_GCC_VERSION="8.4.0"
+
+CONFIG_LIBC="glibc"
+CONFIG_TARGET_SUFFIX="gnueabi"
+# CONFIG_IMAGEOPT is not set
+
+
+CONFIG_LIBC_ROOT_DIR="$(TOPDIR)/build_dir/toolchains/crosstools-arm_softfp-gcc-10.3-linux-4.19-glibc-2.32-binutils-2.36.1/arm-buildroot-linux-gnueabi/sysroot"
+CONFIG_LIBC_FILE_SPEC="./lib/ld{*.so*,-linux*.so.*} ./lib/lib{anl,c,cidn,crypt,dl,m,nsl,nss_dns,nss_files,resolv,util}{-*.so,.so.*,.so}"
+CONFIG_LIBGCC_ROOT_DIR="$(TOPDIR)/build_dir/toolchains/crosstools-arm_softfp-gcc-10.3-linux-4.19-glibc-2.32-binutils-2.36.1/arm-buildroot-linux-gnueabi/sysroot"
+CONFIG_LIBGCC_FILE_SPEC="./lib/libgcc_s.so.*"
+CONFIG_LIBPTHREAD_ROOT_DIR="$(TOPDIR)/build_dir/toolchains/crosstools-arm_softfp-gcc-10.3-linux-4.19-glibc-2.32-binutils-2.36.1/arm-buildroot-linux-gnueabi/sysroot"
+CONFIG_LIBPTHREAD_FILE_SPEC="./lib/libpthread{-*.so,.so.*}"
+CONFIG_LIBRT_ROOT_DIR="$(TOPDIR)/build_dir/toolchains/crosstools-arm_softfp-gcc-10.3-linux-4.19-glibc-2.32-binutils-2.36.1/arm-buildroot-linux-gnueabi/sysroot"
+CONFIG_LIBRT_FILE_SPEC="./lib/librt{-*.so,.so.*}"
+
+CONFIG_LIBSTDCPP_ROOT_DIR="$(TOPDIR)/build_dir/toolchains/crosstools-arm_softfp-gcc-10.3-linux-4.19-glibc-2.32-binutils-2.36.1/arm-buildroot-linux-gnueabi/sysroot"
+CONFIG_LIBSTDCPP_FILE_SPEC="./usr/lib/libstdc++.so.*"
+
+CONFIG_BUSYBOX_CONFIG_MDEV=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_MDEV_CONF=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_MDEV_RENAME=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_MDEV_RENAME_REGEXP=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_MDEV_EXEC=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_MDEV_LOAD_FIRMWARE=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_MDEV_DAEMON=y
+CONFIG_BUSYBOX_CONFIG_BASH_IS_ASH=y
+CONFIG_BUSYBOX_CONFIG_STAT=y
+CONFIG_BUSYBOX_CONFIG_FEATURE_STAT_FORMAT=y
+CONFIG_BUSYBOX_CONFIG_USLEEP=y
+
+CONFIG_PACKAGE_cJSON=y
+CONFIG_PACKAGE_ethtool=y
+
+#
+# Time Zone info
+#
+CONFIG_PACKAGE_zoneinfo-africa=y
+CONFIG_PACKAGE_zoneinfo-all=y
+CONFIG_PACKAGE_zoneinfo-america=y
+CONFIG_PACKAGE_zoneinfo-asia=y
+CONFIG_PACKAGE_zoneinfo-atlantic=y
+CONFIG_PACKAGE_zoneinfo-australia-nz=y
+CONFIG_PACKAGE_zoneinfo-core=y
+CONFIG_PACKAGE_zoneinfo-europe=y
+CONFIG_PACKAGE_zoneinfo-indian=y
+CONFIG_PACKAGE_zoneinfo-pacific=y
+CONFIG_PACKAGE_zoneinfo-poles=y
+# CONFIG_PACKAGE_zoneinfo-simple is not set
+# end of Time Zone info
+

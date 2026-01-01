@@ -1,0 +1,49 @@
+OBJS := mdm2_oidInfoArray.o \
+        mdm2_initbas.o \
+        mdm2_init_sysmgmt.o \
+        mdm2_initlan.o \
+        mdm2_initlan6.o \
+        rcl_container.o stl_container.o \
+        rcl_sysmgmtcomp.o stl_sysmgmtcomp.o \
+        rcl_modswcfg.o stl_modswcfg.o \
+        rcl_basdcfg.o stl_basdcfg.o rut_basdcfg.o \
+        rcl2_openvswitch.o stl2_openvswitch.o
+
+
+# Multiple TR69C in BDK distributed MDM component is not tested and probably does not work.
+# Multiple TR69C in CMS Monolithic mode is not tested but probably still works.
+ifeq ($(strip $(BRCM_MULTIPLE_TR69C_SUPPORT)),2)
+OBJS += rcl2_tr69c_ene.o
+OBJS += stl2_tr69c_ene.o
+OBJS += rcl_system_ene.o
+OBJS += stl_main_ene.o
+endif
+
+ifneq ($(strip $(BUILD_TR69_PERIODIC_STATISTICS)),)
+OBJS += rcl2_periodicstats.o stl2_periodicstats.o
+endif
+
+ifneq ($(strip $(BUILD_SERDES_VI)),)
+CFLAGS += -DD6S_EYE
+endif
+
+ifneq ($(strip $(BUILD_BRCM_XDSL_DISTPOINT)),)
+CFLAGS += -DBUILD_BRCM_XDSL_DISTPOINT
+endif
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive
+
+
+binaryonly_prepare:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

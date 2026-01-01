@@ -1,0 +1,53 @@
+FULL_SOURCE_OBJS := main.o conn.o printers.o http.o ipp.o array.o
+BINARY_ONLY_OBJS :=
+OBJS := $(FULL_SOURCE_OBJS) $(BINARY_ONLY_OBJS)
+
+
+LIBS := -lcms_msg $(CMS_COMMON_LIBS) -ldl
+
+
+HAVESRC := $(wildcard ../main.c)
+
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+$(EXE): $(OBJS)
+	$(CC) $(BCM_LD_FLAGS) -o $@ $(OBJS) $(CMS_RPATH_OPTION) $(CMS_LIB_PATH) $(LIBS)
+
+
+save_binaries:
+	-cp $(EXE) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+
+
+# delete source files from source dir (does not know about multi-arch or mdir)
+delete_source:
+	rm -f *.c *.h Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+
+ifeq ($(strip $(HAVESRC)),)
+
+main.o: main.o.$(PROFILE_ARCH).save
+	cat $< > $@
+conn.o: conn.o.$(PROFILE_ARCH).save
+	cat $< > $@
+printers.o: printers.o.$(PROFILE_ARCH).save
+	cat $< > $@
+http.o: http.o.$(PROFILE_ARCH).save
+	cat $< > $@
+ipp.o: ipp.o.$(PROFILE_ARCH).save
+	cat $< > $@
+array.o: array.o.$(PROFILE_ARCH).save
+	cat $< > $@
+
+-include $(FULL_SOURCE_OBJS:.o=.d)
+
+else
+
+-include $(OBJS:.o=.d)
+
+endif

@@ -1,0 +1,18 @@
+{
+  "name": "bbc",
+  "main": "index.html",
+  "version": "1.0.0",
+  "description": "Broadcom Broadband Commander",
+  "window": {
+    "title": "Broadcom Smart Gateway",
+    "icon": "package.nw/img/logo.png",
+    "position": "center",
+    "width": 1280,
+    "height": 720,
+    "toolbar": true,
+    "frame": true,
+    "resizable": true,
+    "min_width": 1024
+  },
+  "chromium-args" : "allow-file-access"
+}

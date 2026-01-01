@@ -1,0 +1,8 @@
+
+config board 'board'
+	# Hardware specs
+	option hasEthWan '1'
+	option ethernetPortNames 'LAN1 WAN'
+	option ethernetPortOrder 'eth1 eth0'
+	option ethernetLanPorts 'eth1'
+	option ethernetWanPort 'eth0'

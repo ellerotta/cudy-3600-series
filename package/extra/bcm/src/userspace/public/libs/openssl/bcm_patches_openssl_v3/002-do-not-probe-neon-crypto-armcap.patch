@@ -1,0 +1,28 @@
+--- ori_openssl-3.1.4/crypto/armcap.c	2023-10-24 21:01:49.000000000 +0800
++++ openssl-3.1.4/crypto/armcap.c	2023-10-24 11:33:44.529630369 +0800
+@@ -306,7 +306,16 @@
+ #  endif       /* __aarch64__ */
+ 
+ # elif defined(OSSL_IMPLEMENT_GETAUXVAL)
++#if 0  // BRCM SPECIFIC: do NOT probe for NEON, etc.
++       // On the 138, NEON is only on one core.  The autodetect may detect NEON,
++       // and then migrate to the other core, at which point an illegal instruction 
++       // would be encountered.
++
++       // For the 148: currently the neon registers are not saved on a context switch.
++       // If multiple users are accessing neon, then a context switch can cause corrupt
++       // registers.
+ 
++       // simply disabling neon by default:
+     if (getauxval(OSSL_HWCAP) & OSSL_HWCAP_NEON) {
+         unsigned long hwcap = getauxval(OSSL_HWCAP_CE);
+ 
+@@ -350,7 +359,7 @@
+         if (getauxval(OSSL_HWCAP2) & OSSL_HWCAP2_RNG)
+             OPENSSL_armcap_P |= ARMV8_RNG;
+ #  endif
+-
++#endif // BRCM SPECIFIC --end
+ # else /* !__APPLE__ && !OSSL_IMPLEMENT_GETAUXVAL */
+ 
+     /* If all else fails, do brute force SIGILL-based feature detection */

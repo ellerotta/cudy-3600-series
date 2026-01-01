@@ -1,0 +1,247 @@
+--- a/src/Base64.c
++++ b/src/Base64.c
+@@ -68,7 +68,7 @@ static b64_size_t Base64_encodeDecode(
+ 		}
+ 
+ 		rv = BIO_write(b_out, in, (int)in_len);
+-		BIO_flush(b_out); /* indicate end of encoding */
++        (void)BIO_flush(b_out); /* indicate end of encoding */
+ 
+ 		if ( rv > 0 )
+ 		{
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 4c06409..30b4a07 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -57,6 +57,8 @@ IF (NOT PAHO_HIGH_PERFORMANCE)
+     )
+ ENDIF()
+ 
++set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-deprecated-declarations") 
++
+ IF (WIN32)
+     SET(LIBS_SYSTEM ws2_32 crypt32 RpcRT4)
+ ELSEIF (UNIX)
+diff --git a/src/Log.c b/src/Log.c
+index 92054db..aedae15 100644
+--- a/src/Log.c
++++ b/src/Log.c
+@@ -132,6 +132,17 @@ static pthread_mutex_t log_mutex_store = PTHREAD_MUTEX_INITIALIZER;
+ static mutex_type log_mutex = &log_mutex_store;
+ #endif
+ 
++size_t Log_strlcpy(char *dest, const char *src, size_t size)
++{
++    size_t ret = strlen(src);
++
++    if (size) {
++        size_t len = (ret >= size) ? size - 1 : ret;
++        memcpy(dest, src, len);
++        dest[len] = '\0';
++    }
++    return ret;
++}
+ 
+ int Log_initialize(Log_nameValue* info)
+ {
+@@ -406,7 +417,7 @@ static void Log_trace(enum LOG_LEVELS log_level, const char *buf)
+ 	cur_entry->sametime_count = sametime_count;
+ 
+ 	cur_entry->has_rc = 2;
+-	strncpy(cur_entry->name, buf, sizeof(cur_entry->name));
++	Log_strlcpy(cur_entry->name, buf, sizeof(cur_entry->name));
+ 	cur_entry->name[MAX_FUNCTION_NAME_LENGTH] = '\0';
+ 
+ 	Log_posttrace(log_level, cur_entry);
+diff --git a/src/MQTTAsync.c b/src/MQTTAsync.c
+index 11d8723..f0606bc 100644
+--- a/src/MQTTAsync.c
++++ b/src/MQTTAsync.c
+@@ -64,6 +64,8 @@
+ #include "OsWrapper.h"
+ #include "WebSocket.h"
+ 
++#define UNUSED(x) (void)(x)
++
+ static void MQTTAsync_freeServerURIs(MQTTAsyncs* m);
+ 
+ #include "VersionInfo.h"
+@@ -1839,6 +1841,7 @@ void* MQTTAsync_malloc(size_t size)
+ {
+ 	void* val;
+ 	int rc = 0;
++    UNUSED(rc);
+ 
+ 	FUNC_ENTRY;
+ 	val = malloc(size);
+diff --git a/src/MQTTClient.c b/src/MQTTClient.c
+index 3548e95..55510db 100644
+--- a/src/MQTTClient.c
++++ b/src/MQTTClient.c
+@@ -1436,14 +1436,14 @@ static MQTTResponse MQTTClient_connectURIVersion(MQTTClient handle, MQTTClient_c
+ 				if (m->c->outboundMsgs->count > 0)
+ 				{
+ 					ListElement* outcurrent = NULL;
+-					START_TIME_TYPE zero = START_TIME_ZERO;
++					//START_TIME_TYPE zero = START_TIME_ZERO;
+ 
+ 					while (ListNextElement(m->c->outboundMsgs, &outcurrent))
+ 					{
+ 						Messages* m = (Messages*)(outcurrent->content);
+ 						memset(&m->lastTouch, '\0', sizeof(m->lastTouch));
+ 					}
+-					MQTTProtocol_retry(zero, 1, 1);
++					//MQTTProtocol_retry(zero, 1, 1);
+ 					if (m->c->connected != 1)
+ 						rc = MQTTCLIENT_DISCONNECTED;
+ 				}
+diff --git a/src/MQTTProtocolClient.c b/src/MQTTProtocolClient.c
+index e4b8f16..491b9b7 100644
+--- a/src/MQTTProtocolClient.c
++++ b/src/MQTTProtocolClient.c
+@@ -108,7 +108,7 @@ int MQTTProtocol_assignMsgId(Clients* client)
+ 
+ static void MQTTProtocol_storeQoS0(Clients* pubclient, Publish* publish)
+ {
+-	int len;
++	int len = 0;
+ 	pending_write* pw = NULL;
+ 
+ 	FUNC_ENTRY;
+@@ -345,7 +345,7 @@ int MQTTProtocol_handlePublishes(void* pack, SOCKET sock)
+ 	if (publish->header.bits.qos == 1)
+ 	{
+ 		Protocol_processPublication(publish, client, 1);
+-  
++
+ 		if (socketHasPendingWrites)
+ 			rc = MQTTProtocol_queueAck(client, PUBACK, publish->msgId);
+ 		else
+@@ -354,7 +354,7 @@ int MQTTProtocol_handlePublishes(void* pack, SOCKET sock)
+ 	else if (publish->header.bits.qos == 2)
+ 	{
+ 		/* store publication in inbound list */
+-		int len;
++		int len = 0;
+ 		int already_received = 0;
+ 		ListElement* listElem = NULL;
+ 		Messages* m = malloc(sizeof(Messages));
+@@ -918,6 +918,12 @@ void MQTTProtocol_retry(START_TIME_TYPE now, int doRetry, int regardless)
+ 		}
+ 		if (Socket_noPendingWrites(client->net.socket) == 0)
+ 			continue;
++
++        if(client->outboundMsgs->count >= client->maxInflightMessages)
++        {
++            Log(TRACE_MIN, -1, "outboundMsgs is %d, force regardless to true", client->outboundMsgs->count);
++            regardless = 1;
++        }
+ 		if (doRetry)
+ 			MQTTProtocol_retries(now, client, regardless);
+ 	}diff --git a/src/Socket.c b/src/Socket.c
+index 9a91c58..af7315a 100644
+--- a/src/Socket.c
++++ b/src/Socket.c
+@@ -1014,6 +1014,79 @@ exit:
+ }
+ #endif
+ 
++int getInterfaceNameStartPos(const char* inputStr)
++{
++    int inputStrLen = 0;
++    int idx = 0;
++    if (inputStr == NULL) {
++        return -1;
++    }
++
++    inputStrLen = strlen(inputStr);
++    for (idx = 0; idx < inputStrLen; idx++) {
++        if (inputStr[idx] == '%') {
++            idx++;
++            if (idx < inputStrLen) {
++                return idx;
++            } else {
++                return -1;
++            }
++        }
++    }
++    return -1;
++}
++
++int getInterfaceNameLen(const char* inputStr)
++{
++    int idx = 0;
++    int len = 0;
++    int startPosIdx = 0;
++    int inputStrLen = 0;
++
++    if (inputStr == NULL) {
++        return -1;
++    }
++
++    inputStrLen = strlen(inputStr);
++    startPosIdx = getInterfaceNameStartPos(inputStr);
++
++    for (idx = startPosIdx + 1; idx < inputStrLen; idx++) {
++        if (inputStr[idx] == ']') {
++            break;
++        }
++    }
++    len = idx - startPosIdx;
++    return len;
++}
++
++char* getInterfaceName(const char* inputStr)
++{
++    int interfaceNameLen = 0;
++    char* interfaceName;
++    int interfaceNameStartPos = 0;
++    int inputStrLen = 0;
++    int idx;
++
++    if (inputStr == NULL) {
++        return NULL;
++    }
++
++    interfaceNameStartPos = getInterfaceNameStartPos(inputStr);
++    if (interfaceNameStartPos < 0) {
++        return NULL;
++    }
++
++    inputStrLen = strlen(inputStr);
++    interfaceNameLen = getInterfaceNameLen(inputStr);
++    interfaceName = (char*)malloc(interfaceNameLen + 1);
++    interfaceName[interfaceNameLen] = '\0';
++
++    for (idx = 0; ((idx + interfaceNameStartPos) < inputStrLen) && (idx < interfaceNameLen); idx++) {
++       interfaceName[idx] = inputStr[idx + interfaceNameStartPos];
++    }
++
++    return interfaceName;
++}
+ 
+ /**
+  *  Create a new socket and TCP connect to an address/port
+@@ -1165,8 +1238,20 @@ int Socket_new(const char* addr, size_t addr_len, int port, SOCKET* sock)
+ 				if (family == AF_INET)
+ 					rc = connect(*sock, (struct sockaddr*)&address, sizeof(address));
+ 	#if defined(AF_INET6)
+-				else
+-					rc = connect(*sock, (struct sockaddr*)&address6, sizeof(address6));
++               else {
++                   char* interface;
++                   if (family == AF_INET6) {
++                       interface = getInterfaceName(addr);
++                       if (interface) {
++                           rc = setsockopt(*sock, SOL_SOCKET, SO_BINDTODEVICE, (void*)interface, strlen(interface) + 1);
++                           if (rc != 0) {
++                               Log(LOG_ERROR, -1, "failed to bind to interface %s", interface);
++                           }
++                           free(interface);
++                       }
++                   }
++                   rc = connect(*sock, (struct sockaddr*)&address6, sizeof(address6));
++                }
+ 	#endif
+ 				if (rc == SOCKET_ERROR)
+ 					rc = Socket_error("connect", *sock);

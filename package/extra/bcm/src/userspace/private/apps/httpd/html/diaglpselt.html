@@ -1,0 +1,88 @@
+﻿<html>
+  <head>
+    <meta http-equiv='Pragma' content='no-cache' />
+    <link rel="stylesheet" type="text/css" href="stylemain.css" />
+    <link rel="stylesheet" type="text/css" href="colors.css" />
+	<link rel="stylesheet" type="text/css" href="/lib/public/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="/lib/public/chart.js/Chart.min.css" />
+	<script src="/lib/public/jquery/jquery.min.js"></script>
+    <script src="/lib/public/chart.js/Chart.min.js"></script>
+    <script language="javascript">
+var pageObj = {};
+pageObj.contentObj = null;
+function doOnLoad() {
+	console.log("executing doOnLoad");
+	pageObj.initContentObj();
+	pageObj.contentObj.update();
+}
+	</script>
+  </head>
+  <body onload="doOnLoad()">
+    <blockquote>
+      <b>LP-SELT</b><br /><br />
+      <div style="display:none">(<%ejGetOther(diaglpseltget, justaparam)%>)<br /><br />
+        (<%ejGetOther(diaglpseltget, lpseltres)%>)<br /><br />
+      </div>
+
+	  <div id="DiagnosticsTab_LineImpairments" class="container" style="max-width: 95%;">
+		<div class="card card-sm mb-2">
+		  <div class="card-body pt-2 pb-2">
+			<table>
+			  <tr>
+				<td style="vertical-align:middle;"><button id="Diagnostics_RefreshView" class="btn btn-primary btn-sm ml-auto float-right">Refresh</button></td>
+				<td style="vertical-align:middle;">&nbsp;&nbsp;&nbsp;&nbsp;<button id="Diagnostics_DistUnits" class="btn btn-info btn-sm ml-auto float-right">feet</button></td>
+			  </tr>
+			</table>
+		  </div>
+		</div>
+        <div id="bphy-xdsl-diagli-tables"></div>
+      </div>
+    </blockquote>
+	
+	<script type="module">
+import { DiagnosticsTabImpairments } from '/lib/private/xdsl/diagnostics-dashboard-tab-impairments-cpe.js';
+// note: DiagnosticsTabImpairments is not visible "outside" current module
+// so we are setting contentObj right here
+pageObj.contentObj = new DiagnosticsTabImpairments(pageObj);
+	</script>
+    <script language="javascript">
+      /*
+var lpselt_dummy_res = {"name":"xdsl","timestamp":1665171233.889,"data":{"lines":[{"number":0,"testParameters":{"dir":{"ds":{"lpSeltResults":{"impairment":true,"openShort":false,"shuntFault":true,"distFt":31,"tclDB":45,"echoIR":{"range":{"start":0,"stop":127,"increment":1},"metadata":{"offset":0,"scale":1,"size":2,"isComplex":false},"dataB64":"7/8PAPr/CQD3/woA9f8KAO3/FwDZ/yYAp/9lAFb/igArCbf7i//6BaYDmAPzAYgBfQApAIf/Rv/c/rv+ev5l/j3+Ov4s/i7+Lv47/kb+VP5l/nj+jf6h/rb+z/7n/vv+E/8s/0D/V/9t/4H/kf+m/7f/yf/Z/+f/9P8CAA4AGgApADAAOgBFAEwAVABZAGAAZgBrAG0AcgB1AHgAeQB9AH8AgACCAIMAggCEAIMAhACCAIAAgAB/AH0AewB5AHgAdgB1AHMAcgBwAG8AbABoAGgAYwBgAF8AWwBYAFUAUgBQAFAATQBKAEgARwBEAEEAPwA9ADoANwA0ADQAMAAuAA=="},"echoCmIR":{"range":{"start":0,"stop":127,"increment":1},"metadata":{"offset":0,"scale":1,"size":2,"isComplex":false},"dataB64":"/f8BAAUAAwAFAAcABQADAAMAAQD+//n/AQD7/wAA+P8CAPf/7v8dAOb/DgD3//z/BAD2/wMA/v8CAAQAAQAGAAMAAwACAP3/AAD8//j/+//7//v//v8BAAUABgAGAAYABQADAAIA//////v/+f/9//z//f8CAAYACQAKAAgABQADAP///v/+//r/9//1//X/9P/8/wEAAgAEAAMABQAEAAUABgAFAAIA///8//z/+v/7/////v////v/9v/3//r//f/8//3//f/+/wAABAAFAAgACQAGAAIAAAD9//z//P/4//P/8//3//j///8BAAQACAAFAAcABQADAAEAAAD+/w=="}}}}}},{"number":1,"testParameters":{"dir":{"ds":{"lpSeltResults":{"impairment":true,"openShort":false,"shuntFault":true,"distFt":22,"echoIR":{"range":{"start":0,"stop":127,"increment":1},"metadata":{"offset":0,"scale":1,"size":2,"isComplex":false},"dataB64":"6f8VAPD/EwDk/xwA2v8qAMb/SgCX/4EAI/8nAQT+vwJrB8n7SQYuBD4DJgJPAY4A/P9//yf/zv6X/mb+R/4r/hv+Gf4W/h3+Jf45/kf+Wf5x/oj+nf64/s/+5/7//hb/Lf9H/1r/cf+F/5r/rP+//9H/4f/w/wAADAAZACQALgA5AEIASgBUAFkAXwBlAGsAcAB2AHgAfQB/AH8AggCEAIQAhgCFAIYAhQCGAIQAhQCFAIEAgACBAH4AfAB5AHgAdgByAHEAbwBrAGoAZwBmAGMAYQBeAFwAWABXAFQAUQBNAEwASABGAEMAQQA/AD4AOgA5ADYANgAyAC8ALQAsAA=="}}}}}}]}};
+
+      console.log(lpselt_dummy_res);
+      */
+
+pageObj.requestToneData = function(config) {
+
+	//console.log("requestToneData: returning lpselt_dummy_res");	
+	//let res = lpselt_dummy_res;
+	//config.procResult(res);
+	
+	console.log("requestToneData: ajax request for data");
+	$.ajax({
+		url: config.requestUri
+		, async : true
+		, success: function(resstr) {
+	            let resJson = JSON.parse(resstr);
+                console.log(resJson);
+				config.procResult(resJson);
+			}
+	});
+};
+
+pageObj.initContentObj = function() {
+	////////////////////
+	// Refresh button
+	$('#Diagnostics_RefreshView').click(function () { pageObj.contentObj.update(); });
+
+	////////////////////
+	// Distance Units button
+	pageObj.jBtnDistUnits = $('#Diagnostics_DistUnits');
+	
+	// render contentObj
+	pageObj.contentObj.render('DiagnosticsTab_LineImpairments');
+}
+
+    </script>
+  </body>
+</html>

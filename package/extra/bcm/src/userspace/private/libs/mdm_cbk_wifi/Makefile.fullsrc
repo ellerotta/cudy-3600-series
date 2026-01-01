@@ -1,0 +1,28 @@
+OBJS := mdm2_oidInfoArray.o \
+        mdm2_initwifi.o \
+        rcl_wificomp.o stl_wificomp.o
+
+ifneq ($(strip $(BUILD_BRCM_UNFWLCFG)),)
+OBJS += rcl2_unfwifi.o stl2_unfwifi.o rut2_wifi.o rut2_unfwifi.o
+
+OBJS += stl2_unfwifi_dataelement.o \
+        rcl2_unfwifi_dataelement.o
+
+endif
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive
+
+
+binaryonly_prepare:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

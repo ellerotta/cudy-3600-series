@@ -1,0 +1,11 @@
+--- dhcpv6/Makefile.in.orig	2024-01-16 10:41:25.801073246 +0200
++++ dhcpv6/Makefile.in	2024-01-16 10:52:11.455732180 +0200
+@@ -68,7 +68,7 @@
+ 	$(CC) $(LDFLAGS) -o dhcp6s $(SERVOBJS) $(LIBOBJS) $(LIBS)
+ dhcp6relay: $(RELAYOBJS) $(LIBOBJS)
+ 	$(CC) $(LDFLAGS) -o $@ $(RELAYOBJS) $(LIBOBJS) $(LIBS)
+-dhcp6ctl: $(CTLOBJS)
++dhcp6ctl: $(CTLOBJS) $(LIBOBJS)
+ 	$(CC) $(LDFLAGS) -o $@ $(CTLOBJS) $(LIBOBJS) $(LIBS)
+ 
+ cfparse.c y.tab.h: cfparse.y

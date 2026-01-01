@@ -1,0 +1,7 @@
+config board 'board'
+	# Hardware specs
+	option hasEthWan '0'
+	# EAP Single port Ethernet
+	option ethernetPortNames 'LAN0'
+	option ethernetPortOrder 'eth0'
+	option ethernetLanPorts 'eth0'

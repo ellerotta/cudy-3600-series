@@ -1,0 +1,21 @@
+--- orig_zlib-1.2.13/Makefile.in	2022-10-12 22:06:55.000000000 -0700
++++ zlib-1.2.13/Makefile.in	2023-01-25 14:02:04.365606782 -0800
+@@ -320,9 +320,6 @@ install-libs: $(LIBS)
+ 	  ln -s $(SHAREDLIBV) $(DESTDIR)$(sharedlibdir)/$(SHAREDLIBM); \
+ 	  ($(LDCONFIG) || true)  >/dev/null 2>&1; \
+ 	fi
+-	rm -f $(DESTDIR)$(man3dir)/zlib.3
+-	cp $(SRCDIR)zlib.3 $(DESTDIR)$(man3dir)
+-	chmod 644 $(DESTDIR)$(man3dir)/zlib.3
+ 	rm -f $(DESTDIR)$(pkgconfigdir)/zlib.pc
+ 	cp zlib.pc $(DESTDIR)$(pkgconfigdir)
+ 	chmod 644 $(DESTDIR)$(pkgconfigdir)/zlib.pc
+@@ -332,7 +329,7 @@ install-libs: $(LIBS)
+ install: install-libs
+ 	-@if [ ! -d $(DESTDIR)$(includedir)   ]; then mkdir -p $(DESTDIR)$(includedir); fi
+ 	rm -f $(DESTDIR)$(includedir)/zlib.h $(DESTDIR)$(includedir)/zconf.h
+-	cp $(SRCDIR)zlib.h zconf.h $(DESTDIR)$(includedir)
++	$(INSTALL_HEADERS_WITH_CP) $(SRCDIR)zlib.h zconf.h $(DESTDIR)$(includedir)
+ 	chmod 644 $(DESTDIR)$(includedir)/zlib.h $(DESTDIR)$(includedir)/zconf.h
+ 
+ uninstall:

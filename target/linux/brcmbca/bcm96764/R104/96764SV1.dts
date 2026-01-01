@@ -1,0 +1,156 @@
+#include "6764.dtsi"
+#include <dt-bindings/input/linux-event-codes.h>
+
+/ {
+
+	memory_controller {
+		memcfg = <(BP_DDR_TYPE_DDR3       | \
+			BP_DDR_SPEED_933_13_13_13    | \
+			BP_DDR_TOTAL_SIZE_512MB      | \
+			BP_DDR_DEVICE_WIDTH_16         | \
+			BP_DDR_TOTAL_WIDTH_16BIT      | \
+			BP_DDR_6764_DEFAULT)>;    /* memcfg=0x0000142f */
+	};
+
+	config {
+			system_led = "oem:green:red";
+			reset_led = "oem:green:blue";
+	};
+
+	watchdog_hw {
+		compatible = "linux,wdt-gpio";
+		gpios = <&gpioc 07 GPIO_ACTIVE_HIGH>;
+		hw_algo = "toggle";
+		hw_margin_ms = <30000>;
+		status = "ok";
+		always-running;
+	};
+
+    gpio-keys-polled {
+        compatible = "gpio-keys-polled";
+        //#address-cells = <1>;
+        //#size-cells = <0>;
+        poll-interval = <20>;
+
+        reset {
+            label = "reset";
+            gpios = <&gpioc 29 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RESTART>;
+        };
+		lights_toggle {
+			label = "lights_toggle";
+			gpios = <&gpioc 11 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_LIGHTS_TOGGLE>;
+		};
+    };
+};
+
+&mdio_sf2 {
+	/* Port PHY mapping:
+        port_imp -8#0- port_gphy <----> phy_gphy
+                  # 6- port_sgmii1 <--> phy_serdes1 - phy_cascade1
+                  ##5- port_sgmii0 <--> phy_serdes0 <--> port_ext_imp -8#0- port_ext_gphy0 <--> phy_ext_gphy0
+                                                                       # 1- port_ext_gphy1 <--> phy_ext_gphy1
+                                                                       # 2- port_ext_gphy2 <--> phy_ext_gphy2
+                                                                       ##3- port_ext_gphy3 <--> phy_ext_gphy3
+	 */
+	phy_gphy {
+		status = "okay";
+	};
+
+	phy_cascade1 {
+		shared-ref-clk-mhz = <80>;
+		phy-reset = <&gpioc 24 GPIO_ACTIVE_LOW>; 
+		reg = <1>;
+		status = "okay";
+		phy-type = "RTL8221B";
+	};
+	phy_serdes1 {
+		phy-handle = <&phy_cascade1>;	
+		status = "okay";
+	};
+};
+
+&switch0 {
+	ports {
+		port_gphy {
+			phy-handle = <&phy_gphy>;
+			status = "okay";
+			mtd-mac-address = <&bdinfo 0xDE00>;
+		};
+		port_sgmii1 {
+			phy-handle = <&phy_serdes1>;
+			status = "okay";
+			mtd-mac-address = <&bdinfo 0xDE00>;
+			mtd-mac-address-increment = <1>;
+		};
+	};
+};
+
+
+&vreg_sync {
+	pinctrl-0 = <&b_vreg_sync_pin_33 &a_vreg_sync_pin_44>;
+	pinctrl-names = "default";
+	status="okay";
+};
+
+&led_ctrl {
+	led4: sw_parallel_led_4 {
+		active_low;
+		pinctrl-0 = <&a_per_led_28_pin_28>;
+		brightness = <255>;
+		flash_rate = <0>;
+		status="okay";
+		label="oem:green:blue";
+	};
+	led5: sw_parallel_led_5 {
+		active_low;
+		pinctrl-0 = <&a_per_led_10_pin_10>;
+		brightness = <255>;
+		flash_rate = <0>;
+		status="okay";
+		label="oem:green:red";
+	};
+};
+
+&legacy_leds {
+	//wl-sess-led = <&led7>;
+	//wl0-led = <&led6>;
+	wl1-led = <&led5>;
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_sdin_pin_64 &uart0_sdout_pin_65>;
+	status = "okay";
+};
+
+&uart1 {
+    pinctrl-names = "default";
+    pinctrl-0 = <&a_uart1_sin_pin_32 &a_uart1_sout_pin_2>;
+    status = "okay";
+};
+
+
+#if defined(CONFIG_BCM_PCIE_HCD) || defined(CONFIG_BCM_PCIE_HCD_MODULE)
+
+&pcie0 {
+	status = "disabled";
+};
+#endif //#if defined(CONFIG_BCM_PCIE_HCD) || defined(CONFIG_BCM_PCIE_HCD_MODULE)
+
+&plat_rsvmem_uncached_device {
+
+#ifdef DT_RESERVED_DHD_IN_UNCACHED_DEV
+	 dt_reserved_dhd0:dt_reserved_dhd0 {
+		rsvd-size = <0>;
+	};
+	 dt_reserved_dhd1:dt_reserved_dhd1 {
+		rsvd-size = <0>;
+	};
+	 dt_reserved_dhd2:dt_reserved_dhd2 {
+		rsvd-size = <0>;
+	};
+#endif
+
+};

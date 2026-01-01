@@ -1,0 +1,11 @@
+ inadyn-2.12.0/src/openssl_hash.c.orig    2023-11-02 15:45:47.312921537 +0800
++++ inadyn-2.12.0/src/openssl_hash.c    2023-11-02 15:46:05.041333266 +0800
+@@ -19,6 +19,8 @@
+  * Boston, MA 02110-1301, USA.
+  */
+ 
++#define OPENSSL_API_COMPAT 0x10101000L
++
+ #include "md5.h"
+ #include "sha1.h"
+ #include <openssl/md5.h>

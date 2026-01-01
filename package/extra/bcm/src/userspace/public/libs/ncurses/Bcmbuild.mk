@@ -1,0 +1,48 @@
+all dynamic install: conditional_build
+
+#
+# Set our CommEngine directory (by splitting the pwd into two words
+# at /userspace and taking the first word only).
+# Then include the common defines under CommEngine.
+# You do not need to modify this part.
+#
+CURR_DIR := $(shell pwd)
+BUILD_DIR:=$(subst /userspace, /userspace,$(CURR_DIR))
+BUILD_DIR:=$(word 1, $(BUILD_DIR))
+
+include $(BUILD_DIR)/make.common
+
+LIBNAME := libncurses
+
+# Final location of LIB for system image.  Only the BRCM build system needs to
+# know about this.
+FINAL_LIB_INSTALL_DIR := $(INSTALL_DIR)/lib$(BCM_INSTALL_SUFFIX_DIR)
+
+.PHONY: conditional_build 
+
+ifneq ($(strip $(BUILD_LIBNCURSES)),)
+conditional_build: 
+	$(MAKE) -f Makefile install
+	mkdir -p $(INSTALL_DIR)/lib
+	mkdir -p $(INSTALL_DIR)/share
+	@echo "install to final location"
+	cp -a $(BCM_FSBUILD_DIR)/public/lib/$(LIBNAME).so* $(FINAL_LIB_INSTALL_DIR)
+	cp -a $(BCM_FSBUILD_DIR)/public/share/terminfo $(INSTALL_DIR)/share/
+else
+conditional_build:
+	@echo "skipping $(LIBNAME) (not configured)"
+endif
+
+# NOTE: make clean from within app does not do a proper job, so wiping out
+# entire directory to ensure consistency.
+clean:
+	$(MAKE) -f Makefile clean
+	rm -f $(FINAL_LIB_INSTALL_DIR)/$(LIBNAME).so*
+	rm -rf $(INSTALL_DIR)/share/terminfo
+
+# The next line is a hint to our release scripts
+# GLOBAL_RELEASE_SCRIPT_CALL_DISTCLEAN
+distclean: clean
+	
+bcm_dorel_distclean: distclean
+

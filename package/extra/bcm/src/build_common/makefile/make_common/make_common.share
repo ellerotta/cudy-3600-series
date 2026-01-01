@@ -1,0 +1,87 @@
+######################################################################
+# + SDK/make.common
+#
+
+# export some needed BCM configs
+export BRCM_CHIP BCM_WLIMPL
+export BUILD_UNIFIED_WLMNGR BUILD_BRCM_HNDROUTER BUILD_BRCM_CPEROUTER BUILD_BRCM_CMS
+export WLCSM_DEBUG_TRACE BUILD_BRCM_UNFWLCFG BUILD_BRCM_HOSTAPD BUILD_HND_NIC BUILD_MCAST_PROXY
+
+
+# LINE 348
+export BRCM_BOARD := bcm963xx
+
+# LINE 325
+export BRCM_EXT_SWITCH_TYPE
+export BCM_PHY_54616
+
+# LINE 573
+#
+# This is for CMS
+# We could put this in the make menuconfig, but it might
+# confuse the users.  For now, we only support one target OS.
+# Everytime we see OALDIR, substitute it with linux
+#
+TARGET_OS = LINUX
+OALDIR = $(subst LINUX,linux,$(strip $(TARGET_OS)))
+
+
+# LINE 598
+ifneq ($(strip $(BUILD_BRCM_CPEROUTER)),)
+$(info "Build BCA Wireless Router")
+#enable HND WAY of compiling
+export BUILD_BRCM_HNDROUTER=y
+export BCA_CPEROUTER=y
+endif
+
+ifneq ($(strip $(BUILD_BRCM_HNDROUTER)),)
+ifeq ($(strip $(BUILD_BRCM_CPEROUTER)),)
+export BUILD_BRCM_HNDROUTER_ALONE=y
+endif
+ifeq ($(strip $(BUILD_HND_NIC)),)
+export BCM_EXTFDIMAGE_PATH=/etc/wlan/dhd
+endif
+endif # BCA_HNDROUTER
+
+# LINE 2939
+ifneq ($(strip $(BUILD_BRCM_HNDROUTER)),)
+export BCA_HNDROUTER=y
+endif
+
+# LINE 3074
+# Stack Smashing Protection.
+ifeq ($(strip $(BRCM_USER_SSP)),y)
+SSP_MIN_COMPILER_OPTS := -fstack-protector-all
+SSP_TYP_COMPILER_OPTS :=
+SSP_MAX_COMPILER_OPTS :=
+SSP_MIN_LIBS := $(SSP_LIBS)
+SSP_TYP_LIBS :=
+SSP_MAX_LIBS :=
+
+ifneq ($(strip $(BRCM_SSP_LEVEL_TYP)),)
+SSP_TYP_COMPILER_OPTS := -fstack-protector-all
+SSP_MAX_COMPILER_OPTS :=
+SSP_TYP_LIBS := $(SSP_LIBS)
+SSP_MAX_LIBS :=
+endif
+
+ifneq ($(strip $(BRCM_SSP_LEVEL_MAX)),)
+SSP_TYP_COMPILER_OPTS := -fstack-protector-all
+SSP_MAX_COMPILER_OPTS := -fstack-protector-all
+SSP_TYP_LIBS := $(SSP_LIBS)
+SSP_MAX_LIBS := $(SSP_LIBS)
+endif
+
+export BRCM_USER_SSP
+export SSP_MIN_COMPILER_OPTS
+export SSP_TYP_COMPILER_OPTS
+export SSP_MAX_COMPILER_OPTS
+export SSP_LIBS
+export SSP_MIN_LIBS
+export SSP_TYP_LIBS
+export SSP_MAX_LIBS
+endif
+
+#
+# - SDK/make.common
+######################################################################

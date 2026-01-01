@@ -1,0 +1,120 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Controller Configuration</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'cntrlcfg.cgi?';
+
+        // validate input
+        if (document.getElementById('endpointId').value == '') {
+           alert('Endpoint ID cannot be empty.');
+           return;
+        }
+
+        // Enable Connection
+        if (document.getElementById('enable-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        // Alias
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            val += info[1] + '|';
+          } else
+            val += '|';
+        } else
+          val += '|';
+        // Endpoint ID
+        val += document.getElementById('endpointId').value + '|';
+        // Assigned Role
+        val += document.getElementById('assignedRole').value + '|';
+        // Session Context Mode
+        val += document.getElementById('mode').value;
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function bodyLoad() {
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            // Enable Connection
+            if (info[0] == 'Yes')
+              document.getElementById('enable-1').checked = true;
+            else
+              document.getElementById('enable-0').checked = true;
+            // Endpoint ID
+            document.getElementById('endpointId').value = info[2];
+            // Assigned Role
+            document.getElementById('assignedRole').value = info[3];
+            // Session Context Mode
+            document.getElementById('mode').value = info[4];
+          }
+
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          // Enable Connection
+          document.getElementById('enable-1').checked = true;
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>Controller Configuration</h3><br>
+    <div><center>
+      <table border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd' width='120'>Enable Controller</td>
+            <td><input name='enable' id='enable-0' type='radio'>  Disable</td>
+            <td><input name='enable' id='enable-1' type='radio'>  Enable</td>
+          </tr>
+          <tr height='25'>
+          </tr>
+          <tr>
+            <td class='hd'>Endpoint ID</td>
+            <td colspan='2'><input type='text' id='endpointId' required></td>
+          </tr>
+          <tr>
+            <td class='hd'>Assigned Role</td>
+            <td colspan='2'><input type='text' id='assignedRole'></td>
+          </tr>
+          <tr>
+            <td class='hd'>E2E Session Mode</td>
+            <td colspan='2'>
+                <select id='mode'>
+                  <option value='Require'>Require</option>
+                  <option value='Allow'>Allow</option>
+                  <option value='Forbid' selected='selected'>Forbid</option>
+                </select>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+  </form>
+  </body>
+</html>

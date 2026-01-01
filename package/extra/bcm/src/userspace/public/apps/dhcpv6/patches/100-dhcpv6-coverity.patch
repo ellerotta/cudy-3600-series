@@ -1,0 +1,639 @@
+diff -urN wide-dhcpv6-20080615/auth.c wide-dhcpv6-20080615-coverity/auth.c
+--- wide-dhcpv6-20080615/auth.c	2007-03-21 17:52:57.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/auth.c	2022-08-09 18:10:34.398253608 +0800
+@@ -222,7 +222,7 @@
+ {
+ 	md5_invalidate(&ctx->md5ctx);
+ 	memset(ctx->key, 0, sizeof(ctx->key));
+-	memset(ctx, 0, sizeof(ctx));
++	memset(ctx, 0, sizeof(*ctx));
+ }
+ 
+ /*
+diff -urN wide-dhcpv6-20080615/cfparse.y wide-dhcpv6-20080615-coverity/cfparse.y
+--- wide-dhcpv6-20080615/cfparse.y	2007-03-21 17:52:55.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/cfparse.y	2022-08-11 18:15:29.736878817 +0800
+@@ -57,6 +57,7 @@
+ 	(l) = (struct cf_namelist *)malloc(sizeof(*(l))); \
+ 	if ((l) == NULL) { \
+ 		yywarn("can't allocate memory"); \
++		if (n) free(n); \
+ 		if (p) cleanup_cflist(p); \
+ 		return (-1); \
+ 	} \
+@@ -365,8 +366,10 @@
+ 			}
+ 			MAKE_NAMELIST(iapd, zero, $4);
+ 
+-			if (add_namelist(iapd, &iapdlist_head))
++			if (add_namelist(iapd, &iapdlist_head)) {
++				free(zero);
+ 				return (-1);
++			}
+ 		}
+ 	|	ID_ASSOC IA_NA IAID BCL ianaconf_list ECL EOS
+ 		{
+@@ -388,8 +391,10 @@
+ 			}
+ 			MAKE_NAMELIST(iana, zero, $4);
+ 
+-			if (add_namelist(iana, &ianalist_head))
++			if (add_namelist(iana, &ianalist_head)) {
++				free(zero);
+ 				return (-1);
++			}
+ 		}
+ 	;
+ 
+@@ -909,6 +914,7 @@
+ 			}
+ 			if ((pool->name = strdup($1)) == NULL) {
+ 				yywarn("can't allocate memory");
++				free(pool);
+ 				free($1);
+ 				return (-1);
+ 			}
+@@ -934,6 +940,7 @@
+ 			}
+ 			if ((pool->name = strdup($1)) == NULL) {
+ 				yywarn("can't allocate memory");
++				free(pool);
+ 				free($1);
+ 				return (-1);
+ 			}
+diff -urN wide-dhcpv6-20080615/cftoken.l wide-dhcpv6-20080615-coverity/cftoken.l
+--- wide-dhcpv6-20080615/cftoken.l	2007-03-21 17:52:55.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/cftoken.l	2022-08-09 18:10:34.398253608 +0800
+@@ -398,6 +398,7 @@
+ 
+ 	if (incstackp >= MAX_INCLUDE_DEPTH) {
+ 		dprintf(LOG_ERR, FNAME, "cfparse: includes nested too deeply");
++		free(path);
+ 		return (-1);
+ 	}
+ 	incstack[incstackp].path = configfilename;
+@@ -408,6 +409,7 @@
+ 	if (fp == NULL) {
+ 		dprintf(LOG_ERR, FNAME, "cfparse: fopen(%s): %s",
+ 			path, strerror(errno));
++		free(path);
+ 		if (errno == ENOENT)
+ 			return (0);
+ 		return (-1);
+diff -urN wide-dhcpv6-20080615/common.c wide-dhcpv6-20080615-coverity/common.c
+--- wide-dhcpv6-20080615/common.c	2008-06-15 15:48:41.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/common.c	2022-08-11 17:19:44.531061636 +0800
+@@ -840,6 +840,7 @@
+ 	ratio = 1 << 16;
+ 	while ((y - x) * ratio < (y - x))
+ 		ratio = ratio / 2;
++	/* coverity[dont_call] : non-cryptographic use case */
+ 	return (x + ((y - x) * (ratio - 1) / random() & (ratio - 1)));
+ }
+ 
+@@ -894,7 +895,7 @@
+ 	round = (round + 1) & 7;
+ 	cp = addrbuf[round];
+ 
+-	getnameinfo(sa, sysdep_sa_len(sa), cp, NI_MAXHOST,
++	(void) getnameinfo(sa, sysdep_sa_len(sa), cp, NI_MAXHOST,
+ 	    NULL, 0, NI_NUMERICHOST);
+ 
+ 	return (cp);
+@@ -997,6 +998,7 @@
+ 	u_int16_t len = 0, hwtype;
+ 	struct dhcp6opt_duid_type1 *dp; /* we only support the type1 DUID */
+ 	char tmpbuf[256];	/* DUID should be no more than 256 bytes */
++	int l = gethwid(tmpbuf, sizeof(tmpbuf), NULL, &hwtype);
+ 
+ 	if ((fp = fopen(idfile, "r")) == NULL && errno != ENOENT)
+ 		dprintf(LOG_NOTICE, FNAME, "failed to open DUID file: %s",
+@@ -1009,9 +1011,7 @@
+ 			goto fail;
+ 		}
+ 	} else {
+-		int l;
+-
+-		if ((l = gethwid(tmpbuf, sizeof(tmpbuf), NULL, &hwtype)) < 0) {
++		if (l < 0) {
+ 			dprintf(LOG_INFO, FNAME,
+ 			    "failed to get a hardware address");
+ 			goto fail;
+@@ -1019,6 +1019,13 @@
+ 		len = l + sizeof(struct dhcp6opt_duid_type1);
+ 	}
+ 
++	if (len < l + sizeof(dp->dh6_duid1_type) + sizeof(dp->dh6_duid1_hwtype) ||
++	    len > 256) {
++		dprintf(LOG_INFO, FNAME, "invalid DUID length (%d)",
++		    len);
++		goto fail;
++	}
++
+ 	memset(duid, 0, sizeof(*duid));
+ 	duid->duid_len = len;
+ 	if ((duid->duid_id = (char *)malloc(len)) == NULL) {
+@@ -2552,6 +2559,7 @@
+ 
+ 		if (copy_option(DH6OPT_AUTH, authlen - 4,
+ 		    &auth->dh6_auth_proto, &p, optep, &len) != 0) {
++			free(auth);
+ 			goto fail;
+ 		}
+ 		free(auth);
+@@ -2838,6 +2846,7 @@
+ 		 * and the algorithm for these two cases are the same.
+ 		 * [RFC3315 18.1.5]
+ 		 */
++		/* coverity[dont_call] : non-cryptographic use case */
+ 		ev->retrans = (random() % (SOL_MAX_DELAY));
+ 		break;
+ 	default:
+@@ -2848,9 +2857,11 @@
+ 			 * greater than 0.
+ 			 * [RFC3315 17.1.2]
+ 			 */
++			/* coverity[dont_call] */
+ 			r = (double)((random() % 1000) + 1) / 10000;
+ 			n = ev->init_retrans + r * ev->init_retrans;
+ 		} else {
++			/* coverity[dont_call] */
+ 			r = (double)((random() % 2000) - 1000) / 10000;
+ 
+ 			if (ev->timeouts == 0) {
+@@ -3238,6 +3249,8 @@
+ 		    logbuf);
+ 	} else
+ 		syslog(level, "%s%s%s", fname, printfname ? ": " : "", logbuf);
++
++	va_end(ap);
+ }
+ 
+ int
+diff -urN wide-dhcpv6-20080615/config.c wide-dhcpv6-20080615-coverity/config.c
+--- wide-dhcpv6-20080615/config.c	2008-06-15 15:48:41.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/config.c	2022-08-09 18:10:34.398253608 +0800
+@@ -453,7 +453,7 @@
+ 	if ((pif = malloc(sizeof(*pif))) == NULL) {
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "memory allocation for %s failed", cfl0->ptr);
+-		goto bad;
++		return (-1);
+ 	}
+ 	memset(pif, 0, sizeof(*pif));
+ 
+@@ -684,7 +684,6 @@
+ 		}
+ 
+ 		keyid = -1;
+-		expire = NULL;
+ 		for (cfl = key->params; cfl; cfl = cfl->next) {
+ 			switch (cfl->type) {
+ 			case KEYPARAM_REALM:
+@@ -830,6 +829,9 @@
+ 
+ 				kinfo->expire = expire_time;
+ 			}
++
++			free(expire);
++			expire = NULL;
+ 		}
+ 	}
+ 
+@@ -1328,7 +1330,7 @@
+ 		/* copy new configuration */
+ 		ifp->send_flags = ifc->send_flags;
+ 		ifp->allow_flags = ifc->allow_flags;
+-		dhcp6_copy_list(&ifp->reqopt_list, &ifc->reqopt_list);
++		(void)dhcp6_copy_list(&ifp->reqopt_list, &ifc->reqopt_list);
+ 		while ((iac = TAILQ_FIRST(&ifc->iaconf_list)) != NULL) {
+ 			TAILQ_REMOVE(&ifc->iaconf_list, iac, link);
+ 			TAILQ_INSERT_TAIL(&ifp->iaconf_list,
+@@ -1900,7 +1902,7 @@
+ 	if (qstr[0] != '"' || len < 2 || qstr[len - 1] != '"')
+ 		return (NULL);
+ 
+-	if ((dup = malloc(len)) == NULL)
++	if ((dup = malloc(len - 1)) == NULL)
+ 		return (NULL);
+ 
+ 	memcpy(dup, qstr + 1, len - 1);
+@@ -2056,8 +2058,7 @@
+ bad:
+ 	if (host)
+ 		clear_hostconf(host);	/* host->next must be NULL */
+-	if (dynconf)
+-		free(dynconf);
++	free(dynconf);
+ 
+ 	return (NULL);
+ }
+diff -urN wide-dhcpv6-20080615/dhcp6c.c wide-dhcpv6-20080615-coverity/dhcp6c.c
+--- wide-dhcpv6-20080615/dhcp6c.c	2008-06-15 15:48:41.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/dhcp6c.c	2022-08-09 18:10:34.398253608 +0800
+@@ -285,12 +285,14 @@
+ 	sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+ 	if (sock < 0) {
+ 		dprintf(LOG_ERR, FNAME, "socket");
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT,
+ 		       &on, sizeof(on)) < 0) {
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(SO_REUSEPORT): %s", strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #ifdef IPV6_RECVPKTINFO
+@@ -299,6 +301,7 @@
+ 		dprintf(LOG_ERR, FNAME,
+ 			"setsockopt(IPV6_RECVPKTINFO): %s",
+ 			strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #else
+@@ -307,6 +310,7 @@
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(IPV6_PKTINFO): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #endif
+@@ -315,6 +319,7 @@
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(sock, IPV6_MULTICAST_LOOP): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #ifdef IPV6_V6ONLY
+@@ -322,6 +327,7 @@
+ 	    &on, sizeof(on)) < 0) {
+ 		dprintf(LOG_ERR, FNAME, "setsockopt(IPV6_V6ONLY): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #endif
+@@ -333,6 +339,7 @@
+ 	 */
+ 	if (bind(sock, res->ai_addr, res->ai_addrlen) < 0) {
+ 		dprintf(LOG_ERR, FNAME, "bind: %s", strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ 	freeaddrinfo(res);
+@@ -596,7 +603,7 @@
+ 	if (*lenp < ifnamelen || ifnamelen > ifbuflen)
+ 		return (-1);
+ 
+-	memset(ifbuf, 0, sizeof(ifbuf));
++	memset(ifbuf, 0, sizeof(*ifbuf));
+ 	memcpy(ifbuf, *bpp, ifnamelen);
+ 	if (ifbuf[ifbuflen - 1] != '\0')
+ 		return (-1);	/* not null terminated */
+@@ -893,7 +900,7 @@
+ 			    &ev->current_server->optinfo, ev)) {
+ 				dprintf(LOG_NOTICE, FNAME,
+ 				    "failed to construct request data");
+-				break;
++				return (NULL); /* XXX: better recovery? */
+ 			}
+ 		}
+ 		client6_send(ev);
+@@ -929,7 +936,7 @@
+ 			    "failed to create a new event data");
+ 			goto fail;
+ 		}
+-		memset(evd, 0, sizeof(evd));
++		memset(evd, 0, sizeof(*evd));
+ 
+ 		memset(&iaparam, 0, sizeof(iaparam));
+ 		iaparam.iaid = iac->iaid;
+@@ -941,7 +948,7 @@
+ 			TAILQ_INIT(ial);
+ 
+ 			TAILQ_INIT(&pl);
+-			dhcp6_copy_list(&pl,
++			(void)dhcp6_copy_list(&pl,
+ 			    &((struct iapd_conf *)iac)->iapd_prefix_list);
+ 			if (dhcp6_add_listval(ial, DHCP6_LISTVAL_IAPD,
+ 			    &iaparam, &pl) == NULL) {
+@@ -962,7 +969,7 @@
+ 			TAILQ_INIT(ial);
+ 
+ 			TAILQ_INIT(&pl);
+-			dhcp6_copy_list(&pl,
++			(void)dhcp6_copy_list(&pl,
+ 			    &((struct iana_conf *)iac)->iana_address_list);
+ 			if (dhcp6_add_listval(ial, DHCP6_LISTVAL_IANA,
+ 			    &iaparam, &pl) == NULL) {
+@@ -1196,6 +1203,7 @@
+ #ifdef HAVE_ARC4RANDOM
+ 		ev->xid = arc4random() & DH6_XIDMASK;
+ #else
++		/* coverity[dont_call] : non-cryptographic use case */
+ 		ev->xid = random() & DH6_XIDMASK;
+ #endif
+ 		dprintf(LOG_DEBUG, FNAME, "a new XID (%x) is generated",
+@@ -1601,8 +1609,7 @@
+ 	dhcp6_init_options(&newserver->optinfo);
+ 	if (dhcp6_copy_options(&newserver->optinfo, optinfo)) {
+ 		dprintf(LOG_ERR, FNAME, "failed to copy options");
+-		if (newserver->authparam != NULL)
+-			free(newserver->authparam);
++		free(newserver->authparam);
+ 		free(newserver);
+ 		return (-1);
+ 	}
+@@ -2144,5 +2151,5 @@
+ 	if (infreq_mode)
+ 		printf("%s\n", logbuf);
+ 
+-	return;
++	va_end(ap);
+ }
+diff -urN wide-dhcpv6-20080615/dhcp6_ctl.c wide-dhcpv6-20080615-coverity/dhcp6_ctl.c
+--- wide-dhcpv6-20080615/dhcp6_ctl.c	2007-03-21 17:52:53.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/dhcp6_ctl.c	2022-08-09 18:10:34.398253608 +0800
+@@ -117,6 +117,7 @@
+ 		goto fail;
+ 	}
+ 	freeaddrinfo(res);
++	res = NULL;
+ 	if (listen(ctlsock, 1)) {
+ 		dprintf(LOG_ERR, FNAME, "listen(control sock): %s",
+ 		    strerror(errno));
+diff -urN wide-dhcpv6-20080615/dhcp6relay.c wide-dhcpv6-20080615-coverity/dhcp6relay.c
+--- wide-dhcpv6-20080615/dhcp6relay.c	2008-06-15 15:48:41.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/dhcp6relay.c	2022-08-09 18:10:34.398253608 +0800
+@@ -290,7 +290,7 @@
+ relay6_init(int ifnum, char *iflist[])
+ {
+ 	struct addrinfo hints;
+-	struct addrinfo *res, *res2;
++	struct addrinfo *res = NULL, *res2 = NULL;
+ 	int i, error, on;
+ 	struct ipv6_mreq mreq6;
+ 	static struct iovec iov[2];
+@@ -327,6 +327,7 @@
+ 	/* XXX: assume only one DHCPv6 server address */
+ 	memcpy(&sa6_server, res->ai_addr, sizeof (sa6_server));
+ 	freeaddrinfo(res);
++	res = NULL;
+ 
+ 	/* initialize send/receive buffer */
+ 	iov[0].iov_base = (caddr_t)rdatabuf;
+@@ -380,6 +381,7 @@
+ 		goto failexit;
+ 	}
+ 	freeaddrinfo(res);
++	res = NULL;
+ 	on = 1;
+ #ifdef IPV6_RECVPKTINFO
+ 	if (setsockopt(csock, IPPROTO_IPV6, IPV6_RECVPKTINFO,
+@@ -424,6 +426,7 @@
+ 		ifd->ifid = if_nametoindex(ifp);
+ 		if (ifd->ifid == 0) {
+ 			dprintf(LOG_ERR, FNAME, "invalid interface %s", ifp);
++			free(ifd);
+ 			goto failexit;
+ 		}
+ 		mreq6.ipv6mr_interface = ifd->ifid;
+@@ -433,12 +436,14 @@
+ 			dprintf(LOG_ERR, FNAME,
+ 			    "setsockopt(csock, IPV6_JOIN_GROUP): %s",
+ 			     strerror(errno));
++			free(ifd);
+ 			goto failexit;
+ 		}
+ 		TAILQ_INSERT_TAIL(&ifid_list, ifd, ilink);
+ 		iflist++;
+ 	}
+ 	freeaddrinfo(res2);
++	res2 = NULL;
+ 
+ 	/*
+ 	 * Setup a socket to relay to servers.
+@@ -492,6 +497,7 @@
+ 		goto failexit;
+ 	}
+ 	freeaddrinfo(res);
++	res = NULL;
+ 
+ 	on = 1;
+ #ifdef IPV6_RECVPKTINFO
+@@ -518,6 +524,10 @@
+ 	return;
+ 
+   failexit:
++	if (res2 != NULL)
++		freeaddrinfo(res2);
++	if (res != NULL)
++		freeaddrinfo(res);
+ 	exit(1);
+ }
+ 
+diff -urN wide-dhcpv6-20080615/dhcp6s.c wide-dhcpv6-20080615-coverity/dhcp6s.c
+--- wide-dhcpv6-20080615/dhcp6s.c	2008-06-15 15:51:57.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/dhcp6s.c	2022-08-09 18:10:34.398253608 +0800
+@@ -418,18 +418,21 @@
+ 	if (insock < 0) {
+ 		dprintf(LOG_ERR, FNAME, "socket(insock): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ 	if (setsockopt(insock, SOL_SOCKET, SO_REUSEPORT, &on,
+ 		       sizeof(on)) < 0) {
+ 		dprintf(LOG_ERR, FNAME, "setsockopt(insock, SO_REUSEPORT): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ 	if (setsockopt(insock, SOL_SOCKET, SO_REUSEADDR, &on,
+ 		       sizeof(on)) < 0) {
+ 		dprintf(LOG_ERR, FNAME, "setsockopt(insock, SO_REUSEADDR): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #ifdef IPV6_RECVPKTINFO
+@@ -438,6 +441,7 @@
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(inbound, IPV6_RECVPKTINFO): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #else
+@@ -446,6 +450,7 @@
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(inbound, IPV6_PKTINFO): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #endif
+@@ -454,11 +459,13 @@
+ 	    &on, sizeof(on)) < 0) {
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(inbound, IPV6_V6ONLY): %s", strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #endif
+ 	if (bind(insock, res->ai_addr, res->ai_addrlen) < 0) {
+ 		dprintf(LOG_ERR, FNAME, "bind(insock): %s", strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ 	freeaddrinfo(res);
+@@ -480,6 +487,7 @@
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(insock, IPV6_JOIN_GROUP): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res2);
+ 		exit(1);
+ 	}
+ 	freeaddrinfo(res2);
+@@ -502,6 +510,7 @@
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(insock, IPV6_JOIN_GROUP): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res2);
+ 		exit(1);
+ 	}
+ 	freeaddrinfo(res2);
+@@ -517,6 +526,7 @@
+ 	if (outsock < 0) {
+ 		dprintf(LOG_ERR, FNAME, "socket(outsock): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ 	/* set outgoing interface of multicast packets for DHCP reconfig */
+@@ -525,6 +535,7 @@
+ 		dprintf(LOG_ERR, FNAME,
+ 		    "setsockopt(outsock, IPV6_MULTICAST_IF): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #if !defined(__linux__) && !defined(__sun__)
+@@ -532,6 +543,7 @@
+ 	if (shutdown(outsock, 0)) {
+ 		dprintf(LOG_ERR, FNAME, "shutdown(outbound, 0): %s",
+ 		    strerror(errno));
++		freeaddrinfo(res);
+ 		exit(1);
+ 	}
+ #endif
+@@ -1010,6 +1022,7 @@
+ 	dhcp6_clear_options(&optinfo);
+ 
+   end:
++	/* coverity[use_after_free] : TAILQ_REMOVE does the right thing */
+ 	while ((relayinfo = TAILQ_FIRST(&relayinfohead)) != NULL) {
+ 		TAILQ_REMOVE(&relayinfohead, relayinfo, link);
+ 		free_relayinfo(relayinfo);
+@@ -1545,7 +1558,8 @@
+ 			 * removing the adopted prefixes from the list.
+ 			 * The prefixes will be bound to the client.
+ 			 */
+-			if (make_ia(iapd, &conflist, &roptinfo.iapd_list,
++			if (client_conf &&
++			    make_ia(iapd, &conflist, &roptinfo.iapd_list,
+ 			    client_conf, 1) == 0) {
+ 				/*
+ 				 * We could not find any prefixes for the IA.
+@@ -2173,12 +2187,14 @@
+ 	/* server identifier option */
+ 	if (duidcpy(&roptinfo.serverID, &server_duid)) {
+ 		dprintf(LOG_ERR, FNAME, "failed to copy server ID");
+-		goto fail;
++		dhcp6_clear_options(&roptinfo);
++		return (-1);
+ 	}
+ 	/* copy client information back */
+ 	if (duidcpy(&roptinfo.clientID, &optinfo->clientID)) {
+ 		dprintf(LOG_ERR, FNAME, "failed to copy client ID");
+-		goto fail;
++		dhcp6_clear_options(&roptinfo);
++		return (-1);
+ 	}
+ 
+ 	/* get per-host configuration for the client, if any. */
+@@ -2192,7 +2208,8 @@
+ 		dprintf(LOG_INFO, FNAME, "failed to process authentication "
+ 		    "information for %s",
+ 		    clientstr(client_conf, &optinfo->clientID));
+-		goto fail;
++		dhcp6_clear_options(&roptinfo);
++		return (-1);
+ 	}
+ 
+ 	if (client_conf == NULL && ifp->pool.name) {
+@@ -2200,12 +2217,14 @@
+ 			&ifp->pool)) == NULL) {
+ 			dprintf(LOG_NOTICE, FNAME,
+ 		    	"failed to make host configuration");
+-			goto fail;
++			dhcp6_clear_options(&roptinfo);
++			return (-1);
+ 		}
+ 	}
+ 	TAILQ_INIT(&conflist);
+ 	/* make a local copy of the configured addresses */
+-	if (dhcp6_copy_list(&conflist, &client_conf->addr_list)) {
++	if (client_conf &&
++	    dhcp6_copy_list(&conflist, &client_conf->addr_list)) {
+ 		dprintf(LOG_NOTICE, FNAME,
+ 		    "failed to make local data");
+ 		goto fail;
+diff -urN wide-dhcpv6-20080615/if.c wide-dhcpv6-20080615-coverity/if.c
+--- wide-dhcpv6-20080615/if.c	2008-06-15 15:48:43.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/if.c	2022-08-09 18:10:34.398253608 +0800
+@@ -66,7 +66,7 @@
+ 
+ 	if ((ifp = malloc(sizeof(*ifp))) == NULL) {
+ 		dprintf(LOG_ERR, FNAME, "malloc failed");
+-		goto fail;
++		return (NULL);
+ 	}
+ 	memset(ifp, 0, sizeof(*ifp));
+ 
+diff -urN wide-dhcpv6-20080615/lease.c wide-dhcpv6-20080615-coverity/lease.c
+--- wide-dhcpv6-20080615/lease.c	2008-06-15 15:48:43.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/lease.c	2022-08-09 18:10:34.398253608 +0800
+@@ -270,6 +270,7 @@
+ 	memset(entry, 0, sizeof(*entry));
+ 
+ 	if ((entry->val = malloc(size)) == NULL) {
++		free(entry);
+ 		return (-1);
+ 	}
+ 	memcpy(entry->val, val, size);
+diff -urN wide-dhcpv6-20080615/missing/arc4random.c wide-dhcpv6-20080615-coverity/missing/arc4random.c
+--- wide-dhcpv6-20080615/missing/arc4random.c	2007-03-21 17:52:53.000000000 +0800
++++ wide-dhcpv6-20080615-coverity/missing/arc4random.c	2022-08-11 12:12:12.066427275 +0800
+@@ -58,10 +58,15 @@
+ u_int32_t
+ arc4random()
+ {
++	ssize_t n;
+ 	u_int32_t v;
+ 
+ 	if (fd < 0)
+ 		arc4random_init();
+-	read(fd, &v, sizeof(v));
++	n = read(fd, &v, sizeof(v));
++	if (n != sizeof(v)) {
++		err(1, "read(%d)", fd);
++		/*NOTREACHED*/
++	}
+ 	return v;
+ }

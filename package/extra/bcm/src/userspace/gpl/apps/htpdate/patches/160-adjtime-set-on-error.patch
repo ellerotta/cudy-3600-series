@@ -1,0 +1,21 @@
+--- htpdate.c	2023-02-07 11:22:38.812726790 +0800
++++ htpdate-1.3.7/htpdate.c	2023-02-07 11:22:47.253416692 +0800
+@@ -695,7 +695,17 @@ static int setclock(double timedelta, in
+ 
+             /* Become root */
+             swuid(0);
+-            return(adjtime(&timeofday, NULL));
++
++            int rc = adjtime(&timeofday, NULL);
++            if (rc >= 0 || errno != EINVAL)
++            {
++                return rc;
++            }
++
++            /* errno is EINVAL here, this means that the ajdtime() interval was too big */
++            printlog(1, "Interval is too big, setting the clock forcefully.");
++            /* Fallthrough */
++
+         case 2:                        /* Set time */
+             printlog(0, "Setting %.3f seconds", timedelta);
+ 

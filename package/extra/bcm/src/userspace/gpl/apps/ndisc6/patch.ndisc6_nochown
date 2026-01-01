@@ -1,0 +1,11 @@
+--- orig_ndisc6/Makefile	2023-03-10 11:39:25.325466497 +0800
++++ ndisc6/Makefile	2023-03-10 11:39:33.953567727 +0800
+@@ -1857,7 +1857,7 @@ merge-hook: rdnss/merge-hook.in config.s
+ 
+ install-data-hook::
+ 	$(install_sh) -d -- $(DESTDIR)$(myrundir)
+-	-chown -- nobody $(DESTDIR)$(myrundir)
++	#-chown -- nobody $(DESTDIR)$(myrundir)
+ 
+ uninstall-hook::
+ 	-rmdir $(DESTDIR)$(myrundir)

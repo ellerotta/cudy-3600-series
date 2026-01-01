@@ -1,0 +1,36 @@
+OBJS := zbus_mdm.o zbus_strproto.o
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+# These are public API headers needed by other apps which want to call this lib.
+# Private/internal headers should not be listed here.
+HEADERS := bcm_zbus_mdm.h
+
+all: $(LIB)
+	mkdir -p $(HEADER_INSTALL_DIR)
+	install -p -m 444 -t $(HEADER_INSTALL_DIR) $(addprefix $(mdir)/,$(HEADERS))
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive
+
+
+clean:
+	rm -f *.o *.d $(LIB)
+	rm -f $(LIB_INSTALL_DIR)/$(LIB)
+	rm -f $(addprefix $(HEADER_INSTALL_DIR)/,$(HEADERS))
+
+
+# save binary from build subdir (supports multi-arch)
+save_binaries:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+
+# delete source files from source dir (does not know about multi-arch or mdir)
+delete_source:
+	rm -f *.c *.h Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

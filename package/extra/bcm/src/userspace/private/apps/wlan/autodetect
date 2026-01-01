@@ -1,0 +1,3 @@
+dependson: private/libs/wlcsm public/libs/libxml2 private/libs/cms_core private/libs/cms_qdm private/libs/cms_dal private/libs/cms_cli private/libs/ssk_util public/libs/jsonc public/libs/sqlite private/apps/nvram private/apps/hndrouter public/libs/bcm_util private/libs/pmd public/libs/bcm_flashutil public/libs/bcm_boardctl private/libs/cms_qdm private/libs/bcm_comp_md private/libs/bcm_dbus_mdm private/libs/bcm_ubus_mdm private/libs/wldataelm_util
+condition: ifeq ($(shell ( [ ! -z $(BRCM_DRIVER_WIRELESS) ]);  echo $$?),0)
+

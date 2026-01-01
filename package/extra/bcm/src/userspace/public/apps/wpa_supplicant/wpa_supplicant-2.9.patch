@@ -1,0 +1,46 @@
+diff -ruN hostapd-2.9-old/src/drivers/driver_macsec_linux.c hostapd-2.9/src/drivers/driver_macsec_linux.c
+--- hostapd-2.9-old/src/drivers/driver_macsec_linux.c	2019-08-07 16:25:25.000000000 +0300
++++ hostapd-2.9/src/drivers/driver_macsec_linux.c	2021-07-29 11:54:12.343825851 +0300
+@@ -79,6 +79,9 @@
+ 
+ 	u8 encoding_sa;
+ 	Boolean encoding_sa_set;
++
++	u8 offload;
++	u8 offload_set;
+ };
+ 
+ 
+@@ -1080,6 +1083,13 @@
+ 	return (struct rtnl_link *) match;
+ }
+ 
++enum macsec_offload {
++	MACSEC_OFFLOAD_OFF = 0,
++	MACSEC_OFFLOAD_PHY = 1,
++	MACSEC_OFFLOAD_MAC = 2,
++	__MACSEC_OFFLOAD_END,
++	MACSEC_OFFLOAD_MAX = __MACSEC_OFFLOAD_END - 1,
++};
+ 
+ /**
+  * macsec_drv_create_transmit_sc - Create secure connection for transmit
+@@ -1097,6 +1107,7 @@
+ 	char *ifname;
+ 	u64 sci;
+ 	int err;
++	enum macsec_offload offload;
+ 
+ 	wpa_printf(MSG_DEBUG, DRV_PREFIX
+ 		   "%s: create_transmit_sc -> " SCISTR " (conf_offset=%d)",
+@@ -1119,6 +1130,9 @@
+ 	sci = mka_sci_u64(&sc->sci);
+ 	rtnl_link_macsec_set_sci(link, sci);
+ 
++	offload = MACSEC_OFFLOAD_MAC;
++	rtnl_link_macsec_set_offload(link, offload);
++
+ 	drv->created_link = TRUE;
+ 
+ 	err = rtnl_link_add(drv->sk, link, NLM_F_CREATE);
+	

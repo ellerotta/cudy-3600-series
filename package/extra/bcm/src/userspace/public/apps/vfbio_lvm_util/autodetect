@@ -1,0 +1,3 @@
+
+condition: ifneq ($(strip $(BUILD_VFBIO_LVM)),)
+dependson: public/libs/bcm_flashutil

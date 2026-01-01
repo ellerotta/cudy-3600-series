@@ -1,0 +1,81 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>MQTT Client Table</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script type='text/javascript'>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+
+      function addClick() {
+        var loc = 'mqttclntcfg.cgi?uspAction=add';
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function editClick(val) {
+        var loc = 'mqttclntcfg.cgi?uspAction=edit&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function removeClick(rml) {
+        var lst = '';
+
+        if (rml.length > 0)
+          for (i = 0; i < rml.length; i++) {
+            if ( rml[i].checked == true )
+              lst += rml[i].value + ',';
+          }
+        else if ( rml.checked == true )
+          lst = rml.value;
+
+        var loc = 'mqttclnttbl.cgi?uspAction=remove&uspInfo=' + lst;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+   </script>
+  </head>
+  <body>
+  <form>
+    <center><h3>MQTT Client Table</h3><br>
+    <div><center>
+    <table id='mqttClntTbl' border='1' cellpadding='4' cellspacing='0'>
+      <tbody>
+        <tr align='center'>
+          <td class='hd'>Name</td>
+          <td class='hd'>Client ID</td>
+          <td class='hd'>Enable</td>
+          <td class='hd' style="display:none;">Encryption</td>
+          <td class='hd'>Clean Session</td>
+          <td class='hd'>Clean Start</td>
+          <td class='hd'>Request Response</td>
+          <td class='hd'>Request Problem</td>
+          <td class='hd'>Protocol Version</td>
+          <td class='hd'>Transport Protocol</td>
+          <td class='hd'>Broker Address</td>
+          <td class='hd'>Broker Port</td>
+          <td class='hd'>Username</td>
+          <td class='hd'>Keep Alive Time</td>
+          <td class='hd'>Status</td>
+          <td class='hd'>Response</td>
+          <td class='hd'>Edit</td>
+          <td class='hd'>Remove</td>
+        </tr>
+<%ejGetOther(uspGetMqttClientTable)%>
+      </tbody>
+    </table>
+    <br><br>
+    <input type='button' value='Add' onclick='addClick()'>
+    <input type='button' value='Remove' onclick='removeClick(this.form.rml)'>
+    <br><br>
+    </div>
+  </form>
+  </body>
+</html>

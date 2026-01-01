@@ -1,0 +1,15 @@
+--- openssl-3.1.4/apps/openssl.cnf.old	2023-10-24 17:05:57.507607995 +0300
++++ openssl-3.1.4/apps/openssl.cnf	2023-10-24 17:15:30.283517922 +0300
+@@ -52,6 +52,12 @@
+ 
+ [openssl_init]
+ providers = provider_sect
++engines=engines
++
++# Which engine are used
++.include /etc/ssl/engines.cnf
++# Specific configuration for each engine
++.include /etc/ssl/engines.cnf.d/
+ 
+ # List of providers to load
+ [provider_sect]

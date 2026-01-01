@@ -1,0 +1,27 @@
+diff -Naur tmp/lib/core-net/route.c libwebsockets/lib/core-net/route.c
+--- tmp/lib/core-net/route.c	2023-10-03 17:20:38.128749237 -0700
++++ libwebsockets/lib/core-net/route.c	2023-10-03 17:33:55.134424926 -0700
+@@ -255,6 +255,23 @@
+ 			best_gw = rou;
+ 		}
+ 
++        /* PPPoE does not have gateway, set gw if the route entry is:
++         * 1. dest is 0.0.0.0
++         * 2. no gateway info (sin_family == 0)
++         * 3. no source info (sin_family == 0)
++         */
++        if (best_gw == NULL &&
++            dest->sa4.sin_family == AF_INET &&
++            (rou->dest.sa4.sin_family == 0 || rou->dest.sa4.sin_family == AF_INET) &&
++            rou->dest.sa4.sin_addr.s_addr == 0 &&
++            rou->gateway.sa4.sin_family == 0 &&
++            rou->src.sa4.sin_family == 0)
++        {
++			lwsl_cx_info(pt->context, "gw hit");
++			best_gw_priority = rou->priority;
++			best_gw = rou;
++        }
++
+ 	} lws_end_foreach_dll(d);
+ 
+ 	/*

@@ -1,0 +1,89 @@
+#!/bin/sh /etc/rc.common
+
+# This needs to run early before any use of the /etc/board-db/config/hw file.
+START=00
+
+. /lib/functions.sh
+. /lib/functions/environment.sh
+. /lib/bcm67xx.sh
+
+populate_board_params() {
+	[ -s "/etc/board-db/config/hw" ] && return
+
+	echo "Initializing Proper Hardware Board Parameters"
+
+	local boardid="$(bcm67xx_oem_board_name)"
+	echo $boardid
+
+	[ -d "/etc/board-db/config" ] || mkdir /etc/board-db/config
+
+	case $boardid in 
+         963178REF1 | \
+         963178REF2 | \
+         963178REF2_P200)
+            # Change the below line to your proper boardid specific config file, Now we just use default template 4lans1wan, EAP is special Only has 4 lans. Adding more boardid later or define with target device 
+            #cp /etc/board-db/boards/$boardid /etc/board-db/config/hw
+            cp /etc/board-db/boards/963178REF1 /etc/board-db/config/hw
+            ;;
+         96756_P300 | 96756REF2)
+            cp /etc/board-db/boards/4lans1wan /etc/board-db/config/hw
+            ;;
+         96764REF1)
+            cp /etc/board-db/boards/5lans1wan /etc/board-db/config/hw
+            ;;
+         96765REF1 | 96764LREF1 | 96765REF2)
+            cp /etc/board-db/boards/1lan1wan /etc/board-db/config/hw
+            ;;
+         96766REF1)
+            cp /etc/board-db/boards/5lans1wan /etc/board-db/config/hw
+            ;;
+         96766REF2 | 96766REF3)
+            cp /etc/board-db/boards/2lans1wan /etc/board-db/config/hw
+            ;;
+         968580XREF_P400 | 968580XREF | 968580XREFP4OPT | 968580XSV_XFI)
+            cp /etc/board-db/boards/4lans1wan /etc/board-db/config/hw
+            ;;
+         968880REF1 | 968880REF2 )
+            cp /etc/board-db/boards/8lans1wan /etc/board-db/config/hw
+            ;;
+         96813REF1D | 94915REF1D_P1B | 94915REF1D)
+            cp /etc/board-db/boards/6lans1wan /etc/board-db/config/hw
+            ;;
+         949408EAP_XPHY)
+            cp /etc/board-db/boards/4lans /etc/board-db/config/hw
+            ;;
+         949418EAP_P200 | 949418EAP_WOL)
+            cp /etc/board-db/boards/2lans /etc/board-db/config/hw
+            ;;
+         947622LEAP)
+            cp /etc/board-db/boards/1lan /etc/board-db/config/hw
+            ;;
+         949418EAP_P200_WAN)
+            cp /etc/board-db/boards/1lan1wan /etc/board-db/config/hw
+            ;;
+
+         *)
+            # This is a default setting
+            # ucidef_set_interfaces_lan_wan "eth1 eth2 eth3 eth4" "eth0"
+            cp /etc/board-db/boards/4lans1wan /etc/board-db/config/hw
+            ;;
+      esac
+	if [ -d /etc/board-db/boards/$(bcm67xx_oem_board_name) ]; then
+		cp /etc/board-db/boards/$(bcm67xx_oem_board_name)/* /etc/board-db/config/hw
+	fi
+
+	echo "Populating Board DB Parameters"
+	# invoke functions in /lib/functions/environment.sh to get boardid specific data
+	db -q batch <<-EOF
+		set hw.board.model_name="$(get_board_id)"
+		set hw.board.basemac="$(get_base_macaddr)"
+		set hw.board.macaddr_maxsize="$(get_macaddr_maxsize)"
+
+		commit hw.board
+	EOF
+}
+
+boot() {
+	populate_board_params
+}
+

@@ -1,0 +1,192 @@
+<html>
+   <head>
+      <meta HTTP-EQUIV='Pragma' CONTENT='no-cache'>
+      <link rel="stylesheet" href='stylemain.css' type='text/css'>
+         <link rel="stylesheet" href='colors.css' type='text/css'>
+            <script language="javascript" src="util.js"></script>
+            <script language="javascript">
+<!-- hide
+
+var sessionKey='<%ejGetOther(sessionKey)%>';
+
+function frmLoad() {
+   with ( document.forms[0] ) {
+      var enableB = '<%ejGet(enableBasd)%>';
+
+      baspURL.value = '<%ejGet(baspURL)%>';
+      status.value = '<%ejGet(status)%>';
+      deviceId.value = '<%ejGet(deviceId)%>';
+      debugLevel.value = '<%ejGet(debugLevel)%>';
+      keepAliveInterval.value = '<%ejGet(keepAliveInterval)%>';
+      username.value = '<%ejGet(username)%>';
+      password.value = '<%ejGet(password)%>';
+
+      if ( enableB == '1')
+         enableBasd[1].checked = true;
+      else
+         enableBasd[0].checked = true;
+   }
+}
+
+function btnApply() {
+   var loc = 'basdcfg.cgi?';
+
+   with ( document.forms[0] ) {
+      if (baspURL.value == '') {
+         alert('Portal URL is required.');
+         return;
+      }
+
+      if ( enableBasd[1].checked == true ) 
+         loc += 'enableBasd=1';
+	  else
+         loc += 'enableBasd=0';
+
+      if (baspURL.value.length > 1024) {
+         alert('The length of BAS-P URL (' + baspURL.value.length + ') is too long. Its max length is 1024.');
+         return;
+      }
+      loc += '&baspURL=' + encodeUrl(baspURL.value);
+
+      if (deviceId.value.indexOf("'") > -1 ||
+          deviceId.value.indexOf('"') > -1)
+      {
+         alert("ID " + deviceId.value + " cannot contain single quote or double quote");
+         return;
+      }
+      if (deviceId.value.length > 64) {
+         alert('The length of BAS-D device ID (' + deviceId.value.length + ') is too long. Its max length is 64.');
+         return;
+      }
+      loc += '&deviceId=' + encodeUrl(deviceId.value);
+
+      if (debugLevel.value.length > 0)
+      {
+         var debug = parseInt(debugLevel.value);
+
+         if (debug < 0 || debug > 6) {
+            alert('The debug level (' + debug + ') is out of range [0 - 6].');
+            return;
+         }
+
+         loc += '&debugLevel=' + encodeUrl(debugLevel.value);
+      }
+
+      if (keepAliveInterval.value.length > 0)
+      {
+         var interval = parseInt(keepAliveInterval.value);
+
+         if (interval < 0) {
+            alert('The KeepAliveInterval (' + interval + ') is not valid.');
+            return;
+         }
+
+         loc += '&keepAliveInterval=' + encodeUrl(keepAliveInterval.value);
+      }
+
+      if (username.value.length > 256) {
+         alert('The length of username (' + username.value.length + ') is too long. Its max length is 256.');
+         return;
+      }
+      loc += '&username=' + encodeUrl(username.value);
+
+      if (password.value.length > 256) {
+         alert('The length of password (' + password.value.length + ') is too long. Its max length is 256.');
+         return;
+      }
+      loc += '&password=' + encodeUrl(password.value);
+   }
+   
+   loc += '&sessionKey=' + sessionKey;
+   var code = 'location.assign("' + loc + '")';
+
+   eval(code);
+}
+
+function btnRefresh() {
+   var loc = 'basdcfg.cgi?';
+   
+   loc += 'sessionKey=' + sessionKey;
+   var code = 'location.assign("' + loc + '")';
+   eval(code);
+}
+
+function btnRestart() {
+   var loc = 'restartbasd.cmd?';
+   
+   loc += 'sessionKey=' + sessionKey;
+   var code = 'location.assign("' + loc + '")';
+   eval(code);
+}
+
+// done hiding -->
+</script>
+   </head>
+   <body onLoad='frmLoad()'>
+      <blockquote>
+         <form>
+            <b>Broadcom Analytics System Daemon (BAS-D) Configuration</b>
+            <br><br>
+            Enter the values and click "Apply/Save" to configure the BAS-D. This will result in restarting the BAS-D application with the new configuration.
+            <br>
+            The URL is either a host name or an IP address of the BAS Portal followed by a colon and the port number.
+            wss://addr:44310, ssl://addr:8883, or tcp://addr:1883.
+            <br>
+            For SSL connection, a signed certificate needs to be imported.  The name of the certificate has to be bas.crt.
+            <br>
+            <br>
+            Debug level: 0 dump all, 5 error only, 6 disable.
+            <br>
+            
+            Restart button can be clicked to restart bas-d without changing the configuration.
+            <br>
+            Refresh button can be clicked to show current status and configuration information.
+            <br><br>
+            Status: Running means BAS-D is running, not necessarily connected to BAS-P. Stopped means BAS-D has exited due to an error or a failure to start.
+            <br>
+            <b>Status: <%ejGet(status)%></b>
+            <br><br>
+            <table border="0" cellpadding="0" cellspacing="0">
+               <tr>
+                  <td width="240">Connect to BAS-P:</td>
+                  <td><input name='enableBasd' type='radio'>Disable</td>
+                  <td><input name='enableBasd' type='radio'>Enable</td>
+               </tr>
+            </table>
+            <br><br>
+            <table border="0" cellpadding="0" cellspacing="0">
+               <tr>
+                  <td width='240'>BAS Portal URL:</td>
+                  <td><input type='text' name='baspURL' size='25' maxlength='1024' required></td>
+               </tr>
+               <tr>
+                  <td>Device ID:</td>
+                  <td><input type='text' name='deviceId' size='25' maxlength='64'></td>
+               </tr>
+               <tr>
+                  <td>Debug Level [0 - 6]:</td>
+                  <td><input type='text' name='debugLevel' size='25' maxlength='8'></td>
+               </tr>
+               <tr>
+                  <td>Keep Alive Interval:</td>
+                  <td><input type='text' name='keepAliveInterval' size='25' maxlength='8'></td>
+               </tr>
+               <tr>
+                  <td>Username (optional):</td>
+                  <td><input type='text' name='username' size='25' maxlength='256'></td>
+               </tr>
+               <tr>
+                  <td>Password (optional):</td>
+                  <td><input type='password' name='password' size='25' maxlength='256'></td>
+               </tr>
+            </table>
+            <br><br>
+            <p align="center">
+               <input type='button' onClick='btnApply()' value='Apply/Save'>
+               <input type='button' onClick='btnRestart()' value='Restart'>
+               <input type='button' onClick='btnRefresh()' value='Refresh'>
+            </P>
+         </form>
+      </blockquote>
+   </body>
+</html>

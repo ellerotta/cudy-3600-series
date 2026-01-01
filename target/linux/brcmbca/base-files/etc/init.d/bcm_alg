@@ -1,0 +1,47 @@
+#!/bin/sh /etc/rc.common
+
+START=95
+USE_PROCD=1
+
+install_alg_kmods(){
+	[ -s /lib/modules/$(uname -r)/bcmkernel/net/netfilter/nf_conntrack_rtsp.ko ] && insmod /lib/modules/$(uname -r)/bcmkernel/net/netfilter/nf_conntrack_rtsp.ko
+	[ -s /lib/modules/$(uname -r)/bcmkernel/net/netfilter/nf_nat_rtsp.ko ] && insmod /lib/modules/$(uname -r)/bcmkernel/net/netfilter/nf_nat_rtsp.ko
+
+	if [ -s "/lib/modules/$(uname -r)/kernel/net/netfilter/nf_conntrack_ftp.ko" ]; then
+		insmod /lib/modules/$(uname -r)/kernel/net/netfilter/nf_conntrack_ftp.ko
+	fi
+	if [ -s /lib/modules/$(uname -r)/kernel/net/netfilter/nf_nat_ftp.ko ]; then
+		insmod /lib/modules/$(uname -r)/kernel/net/netfilter/nf_nat_ftp.ko
+	fi
+
+	if [ -s /lib/modules/$(uname -r)/kernel/net/netfilter/nf_conntrack_sip.ko ]; then
+		insmod /lib/modules/$(uname -r)/kernel/net/netfilter/nf_conntrack_sip.ko
+	fi	
+	if [ -s /lib/modules/$(uname -r)/kernel/net/netfilter/nf_nat_sip.ko ]; then
+		insmod /lib/modules/$(uname -r)/kernel/net/netfilter/nf_nat_sip.ko
+	fi
+
+	if [ -s /lib/modules/$(uname -r)/kernel/net/netfilter/nf_conntrack_tftp.ko ]; then
+		insmod /lib/modules/$(uname -r)/kernel/net/netfilter/nf_conntrack_tftp.ko
+	fi	
+	if [ -s /lib/modules/$(uname -r)/kernel/net/netfilter/nf_nat_tftp.ko ]; then
+		insmod /lib/modules/$(uname -r)/kernel/net/netfilter/nf_nat_tftp.ko
+	fi
+
+	if [ -s /lib/modules/$(uname -r)/kernel/net/netfilter/nf_conntrack_h323.ko ]; then
+		insmod /lib/modules/$(uname -r)/kernel/net/netfilter/nf_conntrack_h323.ko
+	fi	
+	if [ -s /lib/modules/$(uname -r)/kernel/ipv4/net/netfilter/nf_nat_h323.ko ]; then
+		insmod /lib/modules/$(uname -r)/kernel/net/ipv4/netfilter/nf_nat_h323.ko
+	fi
+
+	echo "net.netfilter.nf_conntrack_helper = 1" >> /etc/sysctl.conf
+}
+
+start_service() {
+	install_alg_kmods
+}
+
+strop_service() {
+	echo "not support yet!"
+}

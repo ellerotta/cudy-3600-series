@@ -1,0 +1,1 @@
+dependson: public/libs/websockets private/libs/cms_core private/libs/cms_qdm private/libs/cms_dal public/libs/cms_msg public/libs/httpdshared

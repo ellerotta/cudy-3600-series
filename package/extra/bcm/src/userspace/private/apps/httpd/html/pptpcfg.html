@@ -1,0 +1,149 @@
+<html>
+   <head>
+      <meta HTTP-EQUIV='Pragma' CONTENT='no-cache'>
+      <link rel="stylesheet" href='stylemain.css' type='text/css'>
+         <link rel="stylesheet" href='colors.css' type='text/css'>
+            <script language="javascript" src="util.js"></script>
+            <script language="javascript">
+<!-- hide
+
+function pptpClick(cb) {
+   if ( cb.checked == true )
+      hideNameInfo(0);
+   else
+      hideNameInfo(1);
+}
+   
+function hideNameInfo(hide) {
+   var status = 'visible';
+
+   if ( hide == 1 )
+      status = 'hidden';
+   if (document.getElementById)  // DOM3 = IE5, NS6
+      document.getElementById('hideinfo').style.visibility = status;
+   else {
+      if (document.layers == false) // IE4
+         document.all.hideinfo.style.visibility = status;
+   }
+}
+
+
+function btnApplySave() {
+   var loc = 'pptpacwan.cmd?';
+
+   with ( document.forms[0] ) {
+     if (chkpptp.checked == true)
+        loc += 'enblPptp=1';
+     else
+        loc += 'enblPptp=0';
+        
+     if (!isValidIpAddress(pptpIpAddress.value)) {
+        alert('PPTP Server Ip Adress "' + pptpIpAddress.value + '" is invalid.');
+        return;
+     }
+     else
+        loc += '&pptpIpAddress=' + pptpIpAddress.value;
+     
+     loc += '&pptpusertname=' + pptpusertname.value;
+
+     loc += '&pptppassword=' + pptppassword.value;
+ 
+   }
+   loc += '&sessionKey=<%ejGetOther(sessionKey)%>';
+   var code = 'location="' + loc + '"';
+   eval(code);
+}
+
+
+function frmLoad() {
+   with ( document.forms[0] ) {
+      var pptpInfo = '';
+      pptpInfo = '<%ejGetOther(pptpAcWanInfo)%>';
+      var pptpAC = pptpInfo.split('|');
+
+      if (pptpAC[0] == 1)
+      {
+         chkpptp.checked = true;
+         hideNameInfo(0);
+      }
+      else 
+      {
+         chkpptp.checked = false;
+         hideNameInfo(1);
+      }
+      
+      pptpIpAddress.value = pptpAC[1];
+      pptpusertname.value = pptpAC[2];
+      pptppassword.value = pptpAC[3];
+   }
+}
+
+// done hiding -->
+</script>
+   </head>
+   <body onLoad='frmLoad()'>
+      <blockquote>
+         <form>
+            <P>
+               <b>PPTP Client Configuration</b><br><br>
+                After setup pptp connection. You can check the link status by reloading the html page after a while. 
+               <br><br>
+            </P>
+
+            <tr>
+               <td colspan="2">
+                  <input type='checkbox' name='chkpptp' onClick='pptpClick(this)'></td>
+               <td>
+                    Enable PPTP Client</td>
+            </tr>
+            <br>
+            <br>
+            <div id='hideinfo'>
+               <table>
+              <tr>
+                <td class='hd'>Link Status:</td>
+                <td class='hd'>
+                   <script language="javascript">
+                   <!-- hide 
+                     {
+                       with ( document.forms[0] ) {
+                          var pptpInfo = '';
+                          pptpInfo = '<%ejGetOther(pptpAcWanInfo)%>';
+                          var pptpAC = pptpInfo.split('|');    
+                          if (pptpAC[0] == 1 && pptpAC[4] == 1) {
+                            document.writeln("<font size=2 color='green'><b>UP</b></font>");
+                          }
+                          else {
+                            document.writeln("<font size=2 color='red'><b>DOWN</b></font>");
+                          }
+                       }
+                     }
+                   // done hiding -->
+                   </script>
+                </td>
+              </tr>
+               <tr>
+                  <td>PPTP Server Ip Address:</td>
+                  <td><input type='text' name='pptpIpAddress'></td>
+               </tr>
+               <tr>
+                  <td>PPTP Username:</td>
+                  <td><input type='text' name='pptpusertname'></td>
+               </tr>
+               <tr>
+                  <td>PPTP Password:</td>
+                  <td><input type='text' name='pptppassword'></td>
+               </tr>
+               </table>
+            </div>
+            <br>
+            <br>
+            <center>
+               <input type='button' onClick='btnApplySave()' value='Apply/Save'>
+            </center>
+         </form>
+      </blockquote>
+   </body>
+</html>
+
+

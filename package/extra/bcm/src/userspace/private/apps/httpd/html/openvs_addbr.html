@@ -1,0 +1,40 @@
+<html>
+   <head>
+      <meta HTTP-EQUIV='Pragma' CONTENT='no-cache'>
+      <link rel="stylesheet" href='stylemain.css' type='text/css'>
+         <link rel="stylesheet" href='colors.css' type='text/css'>
+            <script language="javascript" src="util.js"></script>
+            <script language="javascript" src="portName.js"></script>
+            <script language="javascript">
+<!-- hide
+
+function addBridgeClick() {
+   var loc = 'ovsBridge.cmd?action=addbr';
+   with (document.forms[0]) {
+      loc += '&bridgeName=' + bridgeName.value;
+      loc += '&sessionKey=<%ejGetOther(sessionKey)%>';
+   }
+   var code = 'location="' + loc + '"';
+   eval(code);
+}
+
+// done hiding -->
+      </script>
+   </head>
+   <body>
+      <blockquote>
+         <form name="choiceForm">
+            <b>OVS Bridge Configuration </b><br>
+            <br>
+            To create a new OVS bridge:
+            <br>
+            Enter the Bridge name and it must be unique in the system. If unsure, leave it to be blank and the system will generate a name for you.
+            <br><br>
+            <b>Bridge Name:
+               <input type="text" name="bridgeName" size="32" maxlength="32"></b>
+               <input type="button" onClick='addBridgeClick()' value='Add'>
+            <br><br>
+         </form>
+      </blockquote>
+   </body>
+</html>

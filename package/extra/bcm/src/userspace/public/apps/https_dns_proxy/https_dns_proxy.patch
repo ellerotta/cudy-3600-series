@@ -1,0 +1,11 @@
+--- https_dns_proxy/src/logging.h.orig	2023-10-26 11:17:04.327931606 +0800
++++ https_dns_proxy/src/logging.h	2023-10-26 11:12:12.000016090 +0800
+@@ -37,6 +37,8 @@
+   LOG_MAX
+ };
+ 
++#define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
++
+ #define LOG(level, ...) _log(__FILENAME__, __LINE__, level, __VA_ARGS__)
+ #define DLOG(...) _log(__FILENAME__, __LINE__, LOG_DEBUG, __VA_ARGS__)
+ #define ILOG(...) _log(__FILENAME__, __LINE__, LOG_INFO, __VA_ARGS__)

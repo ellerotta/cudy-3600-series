@@ -1,0 +1,1997 @@
+From 1f40c42507675b144c2e5e8490339845640ef412 Mon Sep 17 00:00:00 2001
+From: Kursad Oney <kursad.oney@broadcom.com>
+Date: Mon, 8 May 2023 10:57:15 -0400
+Subject: [PATCH] broadcom changes
+
+---
+ examples/platforms/brcm/include/brcm_radio.h  | 169 ++++++++++++
+ .../platforms/brcm/include/brcm_radio_csl.h   |  60 +++++
+ include/openthread/platform/radio.h           |  16 ++
+ src/core/api/instance_api.cpp                 |   2 +-
+ src/core/radio/radio_platform.cpp             |  32 +++
+ src/lib/hdlc/BUILD.gn                         |  11 +
+ src/lib/hdlc/CMakeLists.txt                   |  11 +
+ src/lib/hdlc/Makefile.am                      |  11 +
+ src/lib/hdlc/brcm_hdlc.cpp                    | 246 ++++++++++++++++++
+ src/lib/hdlc/hdlc.cpp                         |  29 +++
+ src/lib/hdlc/hdlc.hpp                         |  39 +++
+ src/lib/spinel/Makefile.am                    |  12 +
+ src/lib/spinel/brcm_spinel_defs.h             | 226 ++++++++++++++++
+ src/lib/spinel/brcm_spinel_log.c              | 159 +++++++++++
+ src/lib/spinel/brcm_spinel_log.h              |  47 ++++
+ src/lib/spinel/radio_spinel.hpp               |  32 +++
+ src/lib/spinel/radio_spinel_impl.hpp          |  42 +++
+ src/posix/main.c                              |  17 ++
+ src/posix/platform/CMakeLists.txt             |  12 +
+ src/posix/platform/Makefile.am                |  12 +
+ src/posix/platform/brcm_radio_spinel.cpp      |  80 ++++++
+ src/posix/platform/brcm_radio_spinel_csl.cpp  |  87 +++++++
+ src/posix/platform/hdlc_interface.cpp         | 135 ++++++++++
+ .../platform/openthread-core-posix-config.h   |  44 ++++
+ src/posix/platform/radio.cpp                  |  14 +
+ 25 files changed, 1544 insertions(+), 1 deletion(-)
+ create mode 100755 examples/platforms/brcm/include/brcm_radio.h
+ create mode 100755 examples/platforms/brcm/include/brcm_radio_csl.h
+ create mode 100755 src/lib/hdlc/brcm_hdlc.cpp
+ create mode 100755 src/lib/spinel/brcm_spinel_defs.h
+ create mode 100755 src/lib/spinel/brcm_spinel_log.c
+ create mode 100755 src/lib/spinel/brcm_spinel_log.h
+ create mode 100755 src/posix/platform/brcm_radio_spinel.cpp
+ create mode 100755 src/posix/platform/brcm_radio_spinel_csl.cpp
+
+diff --git a/examples/platforms/brcm/include/brcm_radio.h b/examples/platforms/brcm/include/brcm_radio.h
+new file mode 100755
+index 000000000..b44fe10cc
+--- /dev/null
++++ b/examples/platforms/brcm/include/brcm_radio.h
+@@ -0,0 +1,169 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
++/**
++ * @file brcm_radio.h
++ * @brief Broadcom-specific definitions for interfacing with OpenThread
++ */
++#ifndef BRCM_RADIO_H
++#define BRCM_RADIO_H
++
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++
++/* Alarm Index */
++enum
++{
++    M154_ALARM_TX           = 0,
++    M154_ALARM_RX           = 1,
++    M154_ALARM_SCAN         = 2,
++    M154_ALARM_POLLDATA     = 3,
++    M154_ALARM_TXDATA       = 4,
++    M154_ALARM_CSL          = 5,
++    M154_ALARM_ASSOC        = 6,
++    M154_ALARM_RFU          = 7,
++    M154_ALARM_NUMS,
++};
++
++/* PIB int statistics */
++OT_TOOL_PACKED_BEGIN
++struct BRCM_SPINEL_M154_STATS
++{
++    uint32_t  version;
++    uint32_t  rx_cnt;
++    uint32_t  rx_ack_cnt;
++
++    uint32_t  tx_cnt;
++    uint32_t  tx_auto_ack_cnt;
++
++    uint32_t  csma_ca_ok_cnt;
++    uint32_t  csma_ca_fail_cnt;
++    uint32_t  csma_ca_timeout_cnt;
++} OT_TOOL_PACKED_END;
++typedef struct BRCM_SPINEL_M154_STATS BRCM_SPINEL_M154_STATS_t;
++
++typedef enum
++{
++    M154_PHYDBG_FUNC_CLEAR,
++    M154_PHYDBG_FUNC_TX,
++    M154_PHYDBG_FUNC_RX,
++    M154_PHYDBG_FUNC_DATA,
++    M154_PHYDBG_FUNC_INVALID,
++} M154_PHYDBG_t;
++
++typedef enum
++{
++    M154_PHYDBG_OUT_NONE,
++    M154_PHYDBG_OUT_TXD,
++    M154_PHYDBG_OUT_RXD,
++    M154_PHYDBG_OUT_RTS,
++    M154_PHYDBG_OUT_CTS,
++    M154_PHYDBG_OUT_INVALID,
++} M154_PHYDBG_OUTPUT_t;
++
++/**
++ * Get the firmware 802.15.4 context (e.g. OpenThread vs. ZigBee)
++ *
++ * @param[in]  aInstance     The OpenThread instance structure.
++ * @param[in]  aContextID       Context ID
++ *
++ * @return     nothing
++ */
++void otPlatRadioBrcmSetContext(otInstance *aInstance, uint8_t aContextID);
++
++/**
++ * Set the firmware 802.15.4 context priority
++ *
++ * @param[in]  aInstance     The OpenThread instance structure.
++ * @param[in]  aPriority     Context priority
++ *
++ * @return     nothing
++ */
++void otPlatRadioBrcmSetContextPriority(otInstance *aInstance, uint8_t aPriority);
++
++/**
++ * Get the current firmware 802.15.4 context (e.g. OpenThread vs. ZigBee)
++ *
++ * @param[in]  aInstance     The OpenThread instance structure.
++ *
++ * @return     Current 802.15.4 context in firmware
++ */
++uint8_t otPlatRadioBrcmGetContext(otInstance *aInstance);
++
++/**
++ * Get the current 802.15.4 context priority
++ *
++ * @param[in]  aInstance     The OpenThread instance structure.
++ *
++ * @return     context priority
++ */
++uint8_t otPlatRadioBrcmGetContextPriority(otInstance *aInstance);
++
++
++/**
++ * Get tx/rx statistics for Thread or ZigBee
++ *
++ * @param[in]  aInstance     The OpenThread instance structure.
++ * @param[in]  aContextID    0 for OpenThread stats, 1 for ZigBee stats
++ *
++ * @return     pointer to BRCM_SPINEL_M154_STATS_t
++ */
++BRCM_SPINEL_M154_STATS_t *otPlatRadioBrcmGetStats(otInstance *aInstance, uint8_t aContextID);
++
++/**
++ * Reset tx/rx statistics for Thread or ZigBee
++ *
++ * @param[in]  aInstance     The OpenThread instance structure.
++ * @param[in]  aContextID    0 for OpenThread stats, 1 for ZigBee stats
++ *
++ * @return     nothing
++ */
++void otPlatRadioBrcmResetStats(otInstance *aInstance, uint8_t aContextID);
++
++/**
++ * Spinel loop-back test
++ *
++ * @param[in]  aInstance    The OpenThread instance structure.
++ * @param[in]  *aData       Data to loop back
++ * @param[in]  aDataLen     Length of data to loop back
++ *
++ * @return     nothing
++ */
++void otPlatRadioSpinelLoopback(otInstance *aInstance, const uint8_t *aData, uint16_t aDataLen);
++
++/**
++ * Set the 802.15.4 duty cycle configuration
++ *
++ * @param[in]  aInstance        The OpenThread instance structure.
++ * @param[in]  high_duty_cycle  High duty cycle duration (in us); 0 to disable
++ * @param[in]  period           Period (in us)
++ *
++ * @return     nothing
++ */
++void otPlatRadioBrcmSetThreadDutyCycle(otInstance *aInstance, const uint32_t high_duty_cycle, const uint32_t period);
++
++/**
++ * Read current 802.15.4 duty cycle configuration
++ *
++ * @param[in]  aInstance        The OpenThread instance structure.
++ * @param[out] high_duty_cycle  High duty cycle duration (in us); 0 = disabled
++ * @param[out] period           Period (in us)
++ *
++ * @return     nothing
++ */
++void otPlatRadioBrcmGetThreadDutyCycle(otInstance *aInstance, uint32_t *high_duty_cycle, uint32_t *period);
++
++#ifdef __cplusplus
++}
++#endif
++#endif /* BRCM_RADIO_H */
+diff --git a/examples/platforms/brcm/include/brcm_radio_csl.h b/examples/platforms/brcm/include/brcm_radio_csl.h
+new file mode 100755
+index 000000000..863fbe72c
+--- /dev/null
++++ b/examples/platforms/brcm/include/brcm_radio_csl.h
+@@ -0,0 +1,60 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
++/**
++ * @file brcm_radio_csl.h
++ * @brief Broadcom-specific CSL definitions for interfacing with OpenThread
++ */
++#ifndef BRCM_RADIO_CSL_H
++#define BRCM_RADIO_CSL_H
++
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#if (defined(BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) && BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE)
++/**
++ * Set CSL parent clock accuracy (in ppm), as notified by parent using the CSL Clock Accuracy TLV
++ *
++ * @param[in]  aInstance            The OpenThread instance structure.
++ * @param[in]  aCslParentAccuracy   The CSL parent clock accuracy, in ppm.
++ *
++ * @return     nothing
++ */
++void otPlatRadioBrcmSetCslParentClockAccuracy(otInstance *aInstance, uint8_t aCslParentAccuracy);
++
++/**
++ * Set CSL parent clock uncertainty (in us units), as notified by parent using the CSL Clock Accuracy TLV
++ *
++ * @param[in]  aInstance        The OpenThread instance structure.
++ * @param[in]  aCslParentUncert CSL parent uncertainty, in us units.
++ *
++ * @return     nothing
++ */
++void otPlatRadioBrcmSetCslParentUncertainty(otInstance *aInstance, uint8_t aCslParentUncert);
++#endif	/* BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE */
++
++#ifdef BRCM_OPENTHREAD_CSL_TRANSMITTER_ENABLE
++/**
++ * Disable CSL transmission for specified child
++ *
++ * @param[in]  aShortAddr       Short address of child
++ * @param[in]  aExtAddr         Extended address of child
++ *
++ * @return     nothing
++ */
++void otPlatRadioBrcmCslTransmitDisable(uint16_t aShortAddr, otExtAddress *aExtAddr);
++#endif /* BRCM_OPENTHREAD_CSL_TRANSMITTER_ENABLE */
++
++#ifdef __cplusplus
++}
++#endif
++#endif /* BRCM_RADIO_CSL_H */
+diff --git a/include/openthread/platform/radio.h b/include/openthread/platform/radio.h
+index 240ce45bc..f4e69d4b3 100644
+--- a/include/openthread/platform/radio.h
++++ b/include/openthread/platform/radio.h
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *  Copyright (c) 2016, The OpenThread Authors.
+  *  All rights reserved.
+@@ -324,6 +334,12 @@ typedef struct otRadioFrame
+             bool mCsmaCaEnabled : 1;       ///< Set to true to enable CSMA-CA for this packet, false otherwise.
+             bool mCslPresent : 1;          ///< Set to true if CSL header IE is present.
+             bool mIsSecurityProcessed : 1; ///< True if SubMac should skip the AES processing of this frame.
++
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE) // Vendor TxDone fields
++            uint8_t mBrcmRetryCount;
++            int8_t  mBrcmTxPower;
++#endif // BRCM_OPENTHREAD_ENABLE
++
+         } mTxInfo;
+ 
+         /**
+diff --git a/src/core/api/instance_api.cpp b/src/core/api/instance_api.cpp
+index 61c98359f..48f3a620f 100644
+--- a/src/core/api/instance_api.cpp
++++ b/src/core/api/instance_api.cpp
+@@ -156,7 +156,7 @@ const char *otGetVersionString(void)
+ #else
+     static
+ #endif
+-    const char sVersion[] = PACKAGE_NAME "/" PACKAGE_VERSION "; " OPENTHREAD_CONFIG_PLATFORM_INFO
++    const char sVersion[] = "PACKAGE_NAME:" PACKAGE_NAME "/PACKAGE_VERSION:" PACKAGE_VERSION "; " OPENTHREAD_CONFIG_PLATFORM_INFO
+ #ifdef OPENTHREAD_BUILD_DATETIME
+                                          "; " OPENTHREAD_BUILD_DATETIME
+ #endif
+diff --git a/src/core/radio/radio_platform.cpp b/src/core/radio/radio_platform.cpp
+index 7840a867c..1d906709e 100644
+--- a/src/core/radio/radio_platform.cpp
++++ b/src/core/radio/radio_platform.cpp
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *    Copyright (c) 2019, The OpenThread Authors.
+  *    All rights reserved.
+@@ -314,3 +324,25 @@ OT_TOOL_WEAK otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChanne
+ 
+     return kErrorNotImplemented;
+ }
++
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE)
++void otPlatRadioUpdateCslSampleTime(otInstance *aInstance, uint32_t aCslSampleTime)
++{
++    /* todo : need to check */
++    OT_UNUSED_VARIABLE(aInstance);
++    OT_UNUSED_VARIABLE(aCslSampleTime);
++}
++
++otError otPlatRadioEnableCsl(otInstance         *aInstance,
++                             uint32_t            aCslPeriod,
++                             otShortAddress      aShortAddr,
++                             const otExtAddress *aExtAddr)
++{
++    /* todo : need to check */
++    OT_UNUSED_VARIABLE(aInstance);
++    OT_UNUSED_VARIABLE(aCslPeriod);
++    OT_UNUSED_VARIABLE(aShortAddr);
++    OT_UNUSED_VARIABLE(aExtAddr);
++    return kErrorNotImplemented;
++}
++#endif
+diff --git a/src/lib/hdlc/BUILD.gn b/src/lib/hdlc/BUILD.gn
+index ee46b1b39..a076892ad 100644
+--- a/src/lib/hdlc/BUILD.gn
++++ b/src/lib/hdlc/BUILD.gn
+@@ -1,3 +1,13 @@
++#/*****************************************************************************
++# * Copyright (c) 2023, Broadcom Inc.                                         *
++# *                                                                           *
++# * All Rights Reserved.                                                      *
++# *                                                                           *
++# * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++# * the contents of this file may not be disclosed to third parties, copied   *
++# * or duplicated in any form, in whole or in part, without the prior         *
++# * written permission of Broadcom Inc.                                       *
++# *****************************************************************************/
+ #  Copyright (c) 2020, The OpenThread Authors.
+ #  All rights reserved.
+ #
+@@ -27,6 +37,7 @@
+ 
+ static_library("libopenthread-hdlc") {
+   sources = [
++    "brcm_hdlc.cpp",
+     "hdlc.cpp",
+     "hdlc.hpp",
+   ]
+diff --git a/src/lib/hdlc/CMakeLists.txt b/src/lib/hdlc/CMakeLists.txt
+index 433bc2f93..e2811b6c7 100644
+--- a/src/lib/hdlc/CMakeLists.txt
++++ b/src/lib/hdlc/CMakeLists.txt
+@@ -1,3 +1,13 @@
++#/*****************************************************************************
++# * Copyright (c) 2023, Broadcom Inc.                                         *
++# *                                                                           *
++# * All Rights Reserved.                                                      *
++# *                                                                           *
++# * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++# * the contents of this file may not be disclosed to third parties, copied   *
++# * or duplicated in any form, in whole or in part, without the prior         *
++# * written permission of Broadcom Inc.                                       *
++# *****************************************************************************/
+ #
+ #  Copyright (c) 2020, The OpenThread Authors.
+ #  All rights reserved.
+@@ -27,6 +37,7 @@
+ #
+ 
+ add_library(openthread-hdlc
++    brcm_hdlc.cpp
+     hdlc.cpp
+ )
+ 
+diff --git a/src/lib/hdlc/Makefile.am b/src/lib/hdlc/Makefile.am
+index c410f1469..a5e17eb60 100644
+--- a/src/lib/hdlc/Makefile.am
++++ b/src/lib/hdlc/Makefile.am
+@@ -1,3 +1,13 @@
++#/*****************************************************************************
++# * Copyright (c) 2023, Broadcom Inc.                                         *
++# *                                                                           *
++# * All Rights Reserved.                                                      *
++# *                                                                           *
++# * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++# * the contents of this file may not be disclosed to third parties, copied   *
++# * or duplicated in any form, in whole or in part, without the prior         *
++# * written permission of Broadcom Inc.                                       *
++# *****************************************************************************/
+ #
+ #  Copyright (c) 2020, The OpenThread Authors.
+ #  All rights reserved.
+@@ -36,6 +46,7 @@ libopenthread_hdlc_a_CPPFLAGS               = \
+     $(NULL)
+ 
+ libopenthread_hdlc_a_SOURCES                = \
++    brcm_hdlc.cpp                             \
+     hdlc.cpp                                  \
+     hdlc.hpp                                  \
+     $(NULL)
+diff --git a/src/lib/hdlc/brcm_hdlc.cpp b/src/lib/hdlc/brcm_hdlc.cpp
+new file mode 100755
+index 000000000..4d1d44312
+--- /dev/null
++++ b/src/lib/hdlc/brcm_hdlc.cpp
+@@ -0,0 +1,246 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
++/**
++ * @file
++ *   This file implements an HDLC-lite encoder and decoder.
++ */
++
++#include "hdlc.hpp"
++
++#include <stdlib.h>
++#include <sys/stat.h>
++#include <cerrno>
++#include "common/code_utils.hpp"
++#include "common/logging.hpp"
++
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++
++extern "C"
++{
++    uint8_t g_BrcmCoreDumpInProgress = 0;           // Non-zero if a firmware coredump is in progress
++}
++
++namespace ot {
++namespace Hdlc {
++
++#define kFlagHciEvent                       0x04    // UART HCI message type
++#define HCI_EVENT_OPCODE_VENDOR             0xFF    // vendor specific event
++#define HCI_BRCM_VSE_SUBCODE_DBFW_DUMP      0x1B    // dbfw dump vse
++
++#define HCI_BRCM_DBFW_DUMPTYPE_COREDUMP     0x03
++#define HCI_BRCM_DBFW_COREDUMPTYPE_END      0xFF
++
++
++// DBFW parameter message offsets
++#define BRCM_DBFW_OFFSET_DUMP_TYPE          0x05
++#define BRCM_DBFW_OFFSET_DUMP_LENGTH        0x06
++#define BRCM_DBFW_OFFSET_DUMP_CHECKSUM      0x07
++#define BRCM_DBFW_OFFSET_DUMP_COREDUMP_TYPE 0x08
++
++const char BRCM_HCI_VSE_DUMPFILE_PREFIX[] = "dbfw-vse-dump";
++
++bool Decoder::BrcmDecodeVseByte(uint8_t byte)
++{
++    bool byte_processed = false;
++
++    switch (mState)
++    {
++    case kStateNoSync: // In a bad state - trying to sync to start of next message
++        if (byte == kFlagHciEvent)
++        {
++            mState = kStateBrcmHciEvent;
++
++            // Wait for hci event opcode
++            mBrcmSubState = kBrcmSubStateHciEvtOpcode;
++            byte_processed = true;
++        }
++        break;
++
++    case kStateSync:
++        if ((mDecodedLength == 0) && (byte == kFlagHciEvent))
++        {
++            mState = kStateBrcmHciEvent;
++
++            // Wait for hci event opcode
++            mBrcmSubState = kBrcmSubStateHciEvtOpcode;
++            byte_processed = true;
++
++            mBrcmHciEvtBufCurLen = 0;
++            mBrcmHciEvtBuf[mBrcmHciEvtBufCurLen++] = byte;
++        }
++        break;
++
++
++    case kStateBrcmHciEvent:
++        byte_processed = true;
++
++        // Add byte to hci event buffer
++        if (mBrcmHciEvtBufCurLen < 258)
++        {
++            mBrcmHciEvtBuf[mBrcmHciEvtBufCurLen++] = byte;
++        }
++        else
++        {
++            otLogCritPlat("HCI evt buf overflow");
++        }
++
++        switch (mBrcmSubState)
++        {
++        case kBrcmSubStateHciEvtOpcode:
++            mBrcmHciEvtOpcode = byte;
++
++            // Wait for length LSB
++            mBrcmSubState = kBrcmSubStateHciEvtLen;
++            break;
++
++        case kBrcmSubStateHciEvtLen:
++            mBrcmHciEvtLen = byte;
++
++            // Wait for event parameters (if any)
++            if (!mBrcmHciEvtLen)
++            {
++                // Events with no parameters (not handled)
++                mState = kStateSync;
++            }
++            else if (mBrcmHciEvtOpcode == HCI_EVENT_OPCODE_VENDOR)
++            {
++                mBrcmSubState = kBrcmSubStateVseSubcode;
++            }
++            else
++            {
++                // Not VSE: ignore remainder of HCI event
++                mBrcmSubState = kBrcmSubStateHciEvtIgnore;
++            }
++            break;
++
++        case kBrcmSubStateVseSubcode:
++            mBrcmHciEvtLen--;
++
++            // Wait for event parameters (if any)
++            if (!mBrcmHciEvtLen)
++            {
++                // sub events with no parameters (not handled)
++                mState = kStateSync;
++            }
++            else if (byte == HCI_BRCM_VSE_SUBCODE_DBFW_DUMP)
++            {
++                mBrcmSubState = kBrcmSubStateDbfwParams;
++            }
++            else
++            {
++                // Not DBFW VSE: ignore remainder of HCI event
++                mBrcmSubState = kBrcmSubStateHciEvtIgnore;
++            }
++            break;
++
++        case kBrcmSubStateDbfwParams:
++            mBrcmHciEvtLen--;
++
++            if (mBrcmHciEvtBufCurLen == BRCM_DBFW_OFFSET_DUMP_TYPE)
++            {
++                mBrcmDbfwDumpType = byte;
++            }
++            else if (mBrcmHciEvtBufCurLen == BRCM_DBFW_OFFSET_DUMP_COREDUMP_TYPE)
++            {
++                mBrcmDbfwCoreDumpType = byte;
++            }
++
++            // Handle end of DBFW event
++            if (!mBrcmHciEvtLen)
++            {
++                bool new_filename_available = false;
++
++                // Currently only save coredumps
++                if (mBrcmDbfwDumpType == HCI_BRCM_DBFW_DUMPTYPE_COREDUMP)
++                {
++                    // If first coredump VSE, then open new
++                    if (mBrcmHciEvtCount == 0)
++                    {
++                        uint32_t i;
++                        struct stat aStat;
++
++                        // First VSE - open new logfile using next unused filename in sequence
++                        for (i=0; i < BRCM_HCI_VSE_DUMPFILE_MAXCOUNT; i++)
++                        {
++                            snprintf(mBrcmHciEvtDumpFilename, BRCM_HCI_VSE_DUMPFILE_MAXPATH, "%s-%05d.bin", BRCM_HCI_VSE_DUMPFILE_PREFIX, i);
++                            if (stat(mBrcmHciEvtDumpFilename, &aStat) == -1)
++                            {
++                                if (errno == ENOENT)    // if  "file not found"
++                                {
++                                    new_filename_available = true;
++                                }
++                                break;
++                            }
++                        }
++
++                        // Found new unused filename?
++                        if (new_filename_available)
++                        {
++                            if ((mBrcmDbfwDumpFile = fopen(mBrcmHciEvtDumpFilename, "wb")) == nullptr)
++                            {
++                                // If unable open (or no available filename)
++                                otLogCritPlat("Unable to open file for coredump");
++                            }
++                            else
++                            {
++                                // Indicate that coredump collection is in progress
++                                g_BrcmCoreDumpInProgress = 1;
++                                printf("Core dump collection is on progress (%s)\n", mBrcmHciEvtDumpFilename);
++                            }
++                        }
++                    }
++
++                    // Write the dbfw event to file
++                    printf("coredump vse %d\n", mBrcmHciEvtCount);
++                    if (mBrcmDbfwDumpFile)
++                    {
++                        fwrite(mBrcmHciEvtBuf, sizeof(char), mBrcmHciEvtBufCurLen, mBrcmDbfwDumpFile);
++                    }
++
++                    // If end of coredump marker, then close the dump file
++                    if (mBrcmDbfwCoreDumpType == HCI_BRCM_DBFW_COREDUMPTYPE_END)
++                    {
++                        fclose(mBrcmDbfwDumpFile);
++                        mBrcmDbfwDumpFile = nullptr;
++                        g_BrcmCoreDumpInProgress = 0;
++                        printf("Core dump collection completed\n");
++                    }
++
++                    mBrcmHciEvtCount++;
++                }
++
++                mState = kStateSync;
++            }
++            break;
++
++
++        case kBrcmSubStateHciEvtIgnore:
++            mBrcmHciEvtLen--;
++
++            if (!mBrcmHciEvtLen)
++            {
++                /* Reached end of HCI event - return to sync state (wait for start of next spinel/hci event) */
++                mState = kStateSync;
++            }
++            break;
++        }
++        break;
++
++        default:
++            break;
++    }
++
++    return (byte_processed);
++}
++
++} // namespace Hdlc
++} // namespace ot
++#endif  // BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
+diff --git a/src/lib/hdlc/hdlc.cpp b/src/lib/hdlc/hdlc.cpp
+index b75b42e47..0ee99265c 100644
+--- a/src/lib/hdlc/hdlc.cpp
++++ b/src/lib/hdlc/hdlc.cpp
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *    Copyright (c) 2016, The OpenThread Authors.
+  *    All rights reserved.
+@@ -211,6 +221,11 @@ Decoder::Decoder(FrameWritePointer &aFrameWritePointer, FrameHandler aFrameHandl
+ 
+ void Decoder::Reset(void)
+ {
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++    if (mState == kStateBrcmHciEvent)    // Suppress reset if in the middle of receiving dbfw dump
++        return;
++#endif /* BRCM_OPENTHREAD_REDIRECT_DBFW_VSE */
++
+     mState         = kStateNoSync;
+     mFcs           = 0;
+     mDecodedLength = 0;
+@@ -222,6 +237,14 @@ void Decoder::Decode(const uint8_t *aData, uint16_t aLength)
+     {
+         uint8_t byte = *aData++;
+ 
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++        if (BrcmDecodeVseByte(byte))
++        {
++            /* Processed by BRCM */
++            continue;
++        }
++#endif // BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++
+         switch (mState)
+         {
+         case kStateNoSync:
+@@ -299,6 +322,12 @@ void Decoder::Decode(const uint8_t *aData, uint16_t aLength)
+             }
+ 
+             break;
++
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++        case kStateBrcmHciEvent:
++            // kStateBrcmHciEvent state is handled by BrcmDecodeVseByte
++            break;
++#endif // BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
+         }
+     }
+ }
+diff --git a/src/lib/hdlc/hdlc.hpp b/src/lib/hdlc/hdlc.hpp
+index eb80f6f2c..17b3722be 100644
+--- a/src/lib/hdlc/hdlc.hpp
++++ b/src/lib/hdlc/hdlc.hpp
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *    Copyright (c) 2016, The OpenThread Authors.
+  *    All rights reserved.
+@@ -579,8 +589,37 @@ private:
+         kStateNoSync,
+         kStateSync,
+         kStateEscaped,
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++        kStateBrcmHciEvent,
++#endif /* BRCM_OPENTHREAD_REDIRECT_DBFW_VSE */
+     };
+ 
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++    #define BRCM_HCI_VSE_DUMPFILE_MAXPATH   256     // Maximum size for dump file pathname
++    #define BRCM_HCI_VSE_DUMPFILE_MAXCOUNT  100000  // Maximum number of dump files (00000-99999)
++
++    enum BrcmSubState
++    {
++        kBrcmSubStateHciEvtOpcode,  /* waiting for HCI event opcode */
++        kBrcmSubStateHciEvtLen,     /* waiting for HCI event param len */
++        kBrcmSubStateVseSubcode,    /* waiting for vse subcode */
++        kBrcmSubStateDbfwParams,    /* waiting for HCI event params */
++        kBrcmSubStateHciEvtIgnore,  /* waiting for rest of HCI event (unhandled event) */
++    };
++    BrcmSubState        mBrcmSubState;
++    uint8_t             mBrcmHciEvtOpcode;
++    uint8_t             mBrcmHciEvtLen;
++    uint8_t             mBrcmHciEvtBuf[258];  /* hci pre-amble [1] + hci event opcode [1] + hci event param len [1] + hci params [0-255] */
++    uint16_t            mBrcmHciEvtBufCurLen;
++    char                mBrcmHciEvtDumpFilename[BRCM_HCI_VSE_DUMPFILE_MAXPATH] = {0x00};
++    uint16_t            mBrcmHciEvtCount = 0;
++    FILE *              mBrcmDbfwDumpFile = nullptr;
++    uint8_t             mBrcmDbfwDumpType;
++    uint8_t             mBrcmDbfwCoreDumpType;
++    bool BrcmDecodeVseByte(uint8_t byte);
++#endif /* BRCM_OPENTHREAD_REDIRECT_DBFW_VSE */
++
++
+     State              mState;
+     FrameWritePointer &mWritePointer;
+     FrameHandler       mFrameHandler;
+diff --git a/src/lib/spinel/Makefile.am b/src/lib/spinel/Makefile.am
+index 1540424fb..7f4b892e7 100644
+--- a/src/lib/spinel/Makefile.am
++++ b/src/lib/spinel/Makefile.am
+@@ -1,3 +1,13 @@
++#/*****************************************************************************
++# * Copyright (c) 2023, Broadcom Inc.                                         *
++# *                                                                           *
++# * All Rights Reserved.                                                      *
++# *                                                                           *
++# * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++# * the contents of this file may not be disclosed to third parties, copied   *
++# * or duplicated in any form, in whole or in part, without the prior         *
++# * written permission of Broadcom Inc.                                       *
++# *****************************************************************************/
+ #
+ #  Copyright (c) 2020, The OpenThread Authors.
+ #  All rights reserved.
+@@ -47,6 +57,7 @@ COMMON_CPPFLAGS                                   = \
+     -I$(top_srcdir)/src                             \
+     -I$(top_srcdir)/src/core                        \
+     -I$(top_srcdir)/third_party                     \
++    -I$(top_srcdir)/examples/platforms              \
+     -D_GNU_SOURCE                                   \
+     -DSPINEL_PLATFORM_HEADER=\"spinel_platform.h\"  \
+     $(OPENTHREAD_TARGET_DEFINES)                    \
+@@ -57,6 +68,7 @@ COMMON_SOURCES                                    = \
+     spinel_buffer.cpp                               \
+     spinel_decoder.cpp                              \
+     spinel_encoder.cpp                              \
++    brcm_spinel_log.c                               \
+     $(NULL)
+ 
+ ot_spinel_headers                                 = \
+diff --git a/src/lib/spinel/brcm_spinel_defs.h b/src/lib/spinel/brcm_spinel_defs.h
+new file mode 100755
+index 000000000..0eef32bba
+--- /dev/null
++++ b/src/lib/spinel/brcm_spinel_defs.h
+@@ -0,0 +1,226 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
++/**
++ * @file brcm_spinel_defs.h
++ * @brief Broadcom spinel interface
++ */
++#ifndef BRCM_SPINEL_DEFS_H
++#define BRCM_SPINEL_DEFS_H
++
++#include "spinel.h"
++
++/* Broadcom Spinel Vendor Capabilities */
++enum {
++    SPINEL_CAP_BRCM_RESERVED_0                  = SPINEL_CAP_VENDOR__BEGIN,     /* 15360 (0x3C00) */
++    SPINEL_CAP_BRCM_RCP_SUPPORTS_CSL_TX         = SPINEL_CAP_VENDOR__BEGIN + 1,
++
++    SPINEL_CAP_BRCM_MAX
++};
++
++/* Broadcom Spinel Vendor Commands */
++enum {
++    /**
++      * MLME/MCPS request or response (Host -> NCP)
++      *
++      * Encoding: 'd'
++      *    `d`: MLME/MCPS request or response data
++      *
++      * This command sends MLME/MCPS request or response from the host to the device.
++      */
++    SPINEL_CMD_VENDOR_MLME_MCPS_H2D = SPINEL_CMD_VENDOR__BEGIN,
++
++    /**
++      * MLME/MCPS indication or confirm (NCP -> Host)
++      *
++      * Encoding: 'd'
++      *    `d`: MLME/MCPS indication or confirm data
++      *
++      * This command sends MLME/MCPS indication or confirm from the device to the host.
++      */
++    SPINEL_CMD_VENDOR_MLME_MCPS_D2H = SPINEL_CMD_VENDOR__BEGIN + 1,
++
++    /**
++     * Configure CSL (Used for NCP mode only)
++     *
++     * Encoding:
++     *      'C' parameter to configure (see SPINEL_BRCM_NCP_CSL_* definitions)
++     *      [
++     *          parameter value:
++     *          'C' if SPINEL_BRCM_NCP_CSL_CHANNEL
++     *          'S' if SPINEL_BRCM_NCP_CSL_PERIOD
++     *          'L' if SPINEL_BRCM_NCP_CSL_TIMEOUT
++     *      ]
++     */
++    SPINEL_CMD_BRCM_NCP_CSL,
++};
++
++
++/* Broadcom Spinel Vendor Properties */
++enum {
++    /**
++     * HW Address (IEEE EUI-64)
++     *
++     * Encoding:
++     *      'E' Factory-assigned hardware address IEEE EUI-64
++     */
++    SPINEL_PROP_BRCM_UNUSED_0       = SPINEL_PROP_VENDOR__BEGIN,
++
++    /**
++     * OT configuration/dataset
++     *
++     * Encoding:
++     *      'S' Settings key
++     *      'i' Index
++     *      'd' [optional] data. If omitted, indicates delete settings key (or wipe all keys if
++     *                           settings key is 0xFFFF).
++     */
++    SPINEL_PROP_BRCM_SETTINGS,
++
++    /**
++     * Currently unused
++     */
++    SPINEL_PROP_BRCM_CSL_TBD_0,
++
++    /**
++     * Currently unused
++     */
++    SPINEL_PROP_BRCM_CSL_TBD_1,
++
++    /**
++     * Energy detection of multiple channels
++     *
++     * Encoding:
++     *      'L' Mask of channels
++     *      'S' Scan duration
++     */
++    SPINEL_PROP_BRCM_ENERGY_SCAN,
++
++    /**
++     * Supporting MLME primitive
++     *
++     * Encoding:
++     *      'b' Enabled or disabled to support MLME primitive
++     */
++    SPINEL_PROP_BRCM_SUPPORT_MLME,
++
++    /**
++     * Session priority
++     *
++     * Encoding:
++     *      'C' Priority value.
++     */
++    SPINEL_PROP_BRCM_SESSION_PRI,
++
++    /**
++     * Results for Energy-Detect scan
++     *
++     * Encoding:
++     *      'L' Mask of channels
++     *      'd' Energy-Detect Scan results
++     */
++    SPINEL_PROP_BRCM_ENERGY_SCAN_RESULTS,
++
++    /**
++     * Local loopback test: on PROP_SET, respond with PROP_IS using same payload
++     *
++     * Encoding:
++     *      'd' Loopback data
++     *
++     */
++    SPINEL_PROP_BRCM_LOCAL_LOOPBACK,
++
++
++
++    /*************************************************************************
++     * BRCM CSL transmitter vendor-specific spinel properties
++     */
++    /**
++     *
++     * Disable CSL TX to child
++     *
++     * Encoding:
++     *      'S' TBD
++     *      'E' TBD
++     *
++     */
++    SPINEL_PROP_BRCM_CSL_TX_DISABLE = SPINEL_PROP_VENDOR__BEGIN + 0x1C,
++
++
++    /*************************************************************************
++     * BRCM CSL receiver vendor-specific spinel properties
++     */
++
++    /**
++     * Enable/disable CSL
++     *
++     * Encoding:
++     *      'S' CSL period
++     *      'E' Extended Address
++     */
++    SPINEL_PROP_BRCM_CSL_ENABLE = SPINEL_PROP_VENDOR__BEGIN + 0x20,
++
++    /**
++     * CSL parent clock accuracy (in ppm), as notified by parent using the CSL Clock Accuracy TLV
++     *
++     * Encoding:
++     *      'C' CSL parent clock accuracy, in ppm.
++1     *
++     */
++    SPINEL_PROP_BRCM_CSL_PARENT_CLOCK_ACCURACY,
++
++    /**
++     *
++     * CSL parent clock uncertainty (in us units), as notified by parent using the CSL Clock Accuracy TLV
++     *
++     * Encoding:
++     *      'C'  CSL parent uncertainty, in us units.
++     *
++     */
++    SPINEL_PROP_BRCM_CSL_PARENT_UNCERTAINTY,
++
++    /**
++     * Thread duty cycle
++     *
++     * Duration and interval for granting 802.15.4 resources in the RCP
++     * (used for co-existence with Bluetooth and WiFi)
++     *
++     * Encoding:
++     *      'L' high duty cycle duration (in microseconds, 0 to disable guaranteed duration)
++     *      'L' period   (in microseconds)
++     *
++     */
++    SPINEL_PROP_BRCM_THREAD_DUTY_CYCLE,
++};
++
++/* Format version for SPINEL_PROP_MULTIPAN_THREAD_STATS / SPINEL_PROP_MULTIPAN_ZIGBEE_STATS properties */
++#define SPINEL_BRCM_STATS_FORMAT_VERSION        0x00010000
++
++/* CSL parameters */
++enum {
++    SPINEL_BRCM_NCP_CSL_CHANNEL,
++    SPINEL_BRCM_NCP_CSL_PERIOD,
++    SPINEL_BRCM_NCP_CSL_TIMEOUT
++};
++
++
++/* Spinel properties for meshcop used by pyspinel (deprecated) */
++enum {
++    SPINEL_PROP_MESHCOP_DEPRECATED__BEGIN   = 0x1600,
++
++    SPINEL_PROP_MESHCOP_JOINER_ENABLE       = SPINEL_PROP_MESHCOP_DEPRECATED__BEGIN + 0,  // [b]
++    SPINEL_PROP_MESHCOP_JOINER_CREDENTIAL,      // [D]
++    SPINEL_PROP_MESHCOP_JOINER_URL,             // [U]
++    SPINEL_PROP_MESHCOP_BORDER_AGENT_ENABLE,    // [b]
++
++    SPINEL_PROP_MESHCOP_DEPRECATED__END     = 0x1700
++};
++
++#endif /* BRCM_SPINEL_DEFS_H */
+diff --git a/src/lib/spinel/brcm_spinel_log.c b/src/lib/spinel/brcm_spinel_log.c
+new file mode 100755
+index 000000000..43df2593d
+--- /dev/null
++++ b/src/lib/spinel/brcm_spinel_log.c
+@@ -0,0 +1,159 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
++
++/**
++ * @file brcm_spinel_log.c
++ * @brief Broadcom spinel interface
++ */
++#include <stdio.h>
++#include <stdlib.h>
++#include <openthread/dataset.h>
++#include "common/logging.hpp"
++#include "utils/code_utils.h"
++#include "spinel.h"
++#include "brcm_spinel_log.h"
++
++#define LOGBUF_BYTES_PER_LINE   16
++
++/************************************************************************8
++ * spinel/hdlc logging functions
++ */
++
++/* brcm spinel flags (see SPINEL_BRCM_FL_* definitions */
++uint32_t spinel_brcm_flags = 0;
++
++/* Structure definition for spinel value-to-string look-up table */
++struct spinel_cstr
++{
++    uint32_t    val;
++    const char *str;
++};
++
++/* Spinel value-to-string look-up */
++static const char *brcm_spinel_to_cstr(const struct spinel_cstr *table, uint32_t val)
++{
++    int i;
++
++    for (i = 0; table[i].str; i++)
++        if (val == table[i].val)
++            return table[i].str;
++    return NULL;
++}
++
++/* spinel command value-to-string look-up */
++const char *brcm_spinel_command_to_cstr(spinel_command_t command)
++{
++    const char *cstr;
++    static const struct spinel_cstr brcm_spinel_commands_cstr[] = {
++        {SPINEL_CMD_VENDOR_MLME_MCPS_H2D, "VENDOR_MLME_MCPS_H2D"},
++        {SPINEL_CMD_VENDOR_MLME_MCPS_D2H, "VENDOR_MLME_MCPS_D2H"},
++        {SPINEL_CMD_BRCM_NCP_CSL, "BRCM_NCP_CSL"},
++        {0, NULL},
++    };
++
++    if ((cstr = brcm_spinel_to_cstr(brcm_spinel_commands_cstr, command)) == NULL)
++        cstr = spinel_command_to_cstr(command);
++
++    return cstr;
++}
++
++/* spinel property value-to-string look-up */
++const char *brcm_spinel_prop_key_to_cstr(spinel_prop_key_t prop_key)
++{
++    const char *cstr;
++    static const struct spinel_cstr brcm_spinel_prop_cstr[] = {
++        {SPINEL_PROP_BRCM_UNUSED_0, "BRCM_UNUSED_0"},
++        {SPINEL_PROP_BRCM_SETTINGS, "BRCM_SETTINGS"},
++        {SPINEL_PROP_BRCM_ENERGY_SCAN, "BRCM_ENERGY_SCAN"},
++        {SPINEL_PROP_BRCM_SUPPORT_MLME, "BRCM_SUPPORT_MLME"},
++        {SPINEL_PROP_BRCM_SESSION_PRI, "BRCM_SESSION_PRI"},
++        {SPINEL_PROP_BRCM_ENERGY_SCAN_RESULTS, "BRCM_ENERGY_SCAN_RESULTS"},
++        {SPINEL_PROP_BRCM_LOCAL_LOOPBACK, "BRCM_LOCAL_LOOPBACK"},
++        {SPINEL_PROP_BRCM_CSL_TX_DISABLE, "BRCM_CSL_TX_DISABLE"},
++        {SPINEL_PROP_BRCM_CSL_ENABLE, "BRCM_CSL_ENABLE"},
++        {SPINEL_PROP_BRCM_CSL_PARENT_CLOCK_ACCURACY, "BRCM_CSL_PARENT_CLOCK_ACCURACY"},
++        {SPINEL_PROP_BRCM_CSL_PARENT_UNCERTAINTY, "BRCM_CSL_PARENT_UNCERTAINTY"},
++        {SPINEL_PROP_BRCM_THREAD_DUTY_CYCLE, "BRCM_THREAD_DUTY_CYCLE"},
++
++        /* Additional properties (currently not included in OpenThread's spinel_prop_key_to_cstr) */
++        {SPINEL_PROP_RCP_TIMESTAMP, "RCP_TIMESTAMP"},
++
++        {0, NULL},
++    };
++
++    if ((cstr = brcm_spinel_to_cstr(brcm_spinel_prop_cstr, prop_key)) == NULL)
++        cstr = spinel_prop_key_to_cstr(prop_key);
++
++    return cstr;
++}
++
++#ifndef BRCM_SPINEL_DAEMON
++/* Log spinel message */
++void spinel_brcm_LogMsg(bool is_tx, uint8_t spinel_hdr, uint8_t cmd, uint32_t key)
++{
++    otEXPECT(spinel_brcm_flags & SPINEL_BRCM_FL_LOG_SPINEL_ENABLE);      /* Check if spinel logging is enabled */
++
++    otLogInfoPlat("[brcm] %s (%d) %s[%s]",
++            (is_tx ? "->RCP":"<-RCP"),
++            SPINEL_HEADER_GET_TID(spinel_hdr),
++            brcm_spinel_command_to_cstr(cmd),
++            brcm_spinel_prop_key_to_cstr(key));
++
++exit:
++    return;
++}
++
++/* Display buffer */
++void spinel_brcm_LogBuf(const char *name, char *buf, int buf_len)
++{
++    int cur_len = LOGBUF_BYTES_PER_LINE;
++    int i, x = 0;
++    char tempbuf[128], *p;
++
++    otEXPECT(spinel_brcm_flags & SPINEL_BRCM_FL_LOG_HDLC_ENABLE);
++
++    /* Display name/title if any */
++    if (name)
++    {
++        otLogInfoPlat("[brcm] %s (%d bytes):", name, buf_len);
++    }
++
++    if (!buf)
++    {
++        return;
++    }
++
++    /* Display the bytes */
++    while (buf_len)
++    {
++        p = tempbuf;
++        sprintf(p, "    %04X:", x);
++        p += 9;
++        if (buf_len < LOGBUF_BYTES_PER_LINE)
++        {
++            cur_len = buf_len;
++        }
++        for (i=0; i<cur_len; i++)
++        {
++            sprintf(p, " %02X", (uint8_t)buf[i]);
++            p+=3;
++        }
++        *p = '\0';
++        otLogInfoPlat("[brcm] %s", tempbuf);
++        x += cur_len;
++        buf_len -= cur_len;
++        buf += cur_len;
++    }
++
++exit:
++    return;
++}
++#endif  /* !BRCM_SPINEL_DAEMON */
+diff --git a/src/lib/spinel/brcm_spinel_log.h b/src/lib/spinel/brcm_spinel_log.h
+new file mode 100755
+index 000000000..0fc5c38f6
+--- /dev/null
++++ b/src/lib/spinel/brcm_spinel_log.h
+@@ -0,0 +1,47 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
++
++/**
++ * @file brcm_spinel_log.h
++ * @brief Broadcom spinel interface
++ */
++#ifndef BRCM_SPINEL_LOG_H
++#define BRCM_SPINEL_LOG_H
++
++#include "brcm_spinel_defs.h"
++
++/* Spinel logging definitions */
++#define SPINEL_BRCM_FL_LOG_SPINEL_ENABLE    0x00000001
++#define SPINEL_BRCM_FL_LOG_HDLC_ENABLE      0x00000002
++extern uint32_t spinel_brcm_flags;      /* see SPINEL_BRCM_FL_* definitions */
++
++
++#if defined(__cplusplus)
++extern "C" {
++#endif
++
++/* Convert Spinel property key to readable string */
++char *spinel_brcm_KeyIdToStr(uint32_t key);
++
++/* Convert Spinel command ID to readable string */
++char *spinel_brcm_CmdIdToStr(uint32_t key);
++
++/* Display spinel hdlc buffer */
++void spinel_brcm_LogBuf(const char *name, char *buf, int buf_len);
++
++/* Display spinel message */
++void spinel_brcm_LogMsg(bool is_tx, uint8_t spinel_hdr, uint8_t cmd, uint32_t key);
++
++#if defined(__cplusplus)
++}
++#endif
++
++#endif /* BRCM_SPINEL_LOG_H */
+diff --git a/src/lib/spinel/radio_spinel.hpp b/src/lib/spinel/radio_spinel.hpp
+index a7701811b..3586cac97 100644
+--- a/src/lib/spinel/radio_spinel.hpp
++++ b/src/lib/spinel/radio_spinel.hpp
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *  Copyright (c) 2018, The OpenThread Authors.
+  *  All rights reserved.
+@@ -175,6 +185,20 @@ public:
+      */
+     otError GetIeeeEui64(uint8_t *aIeeeEui64);
+ 
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE)
++    /**
++     * [brcm] This method updates the hw address (IeeeEui64) on the radio transceiver
++     *
++     * @param[in]   aExtAddress             New hw address
++     *
++     * @retval  OT_ERROR_NONE               Successfully set the property.
++     * @retval  OT_ERROR_BUSY               Failed due to another operation is on going.
++     * @retval  OT_ERROR_RESPONSE_TIMEOUT   Failed due to no response received from the transceiver.
++     *
++     */
++    otError SetBrcmIeeeEui64(const otExtAddress &aExtAddress);
++#endif /* BRCM_OPENTHREAD_ENABLE */
++
+     /**
+      * This method sets the Extended Address for address filtering.
+      *
+@@ -1084,7 +1108,15 @@ private:
+     int8_t       mRxSensitivity;
+     otError      mTxError;
+     char         mVersion[kVersionStringSize];
++
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE)
++public:
++    otExtAddress mIeeeEui64;        // [brcm] set to public (to allow setting IeeeEui64)
++
++private:
++#else   // !BRCM_OPENTHREAD_ENABLE
+     otExtAddress mIeeeEui64;
++#endif
+ 
+     State mState;
+     bool  mIsPromiscuous : 1;     ///< Promiscuous mode.
+diff --git a/src/lib/spinel/radio_spinel_impl.hpp b/src/lib/spinel/radio_spinel_impl.hpp
+index d4d78f176..3d995cc69 100644
+--- a/src/lib/spinel/radio_spinel_impl.hpp
++++ b/src/lib/spinel/radio_spinel_impl.hpp
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *  Copyright (c) 2020, The OpenThread Authors.
+  *  All rights reserved.
+@@ -54,6 +64,9 @@
+ #include "meshcop/meshcop_tlvs.hpp"
+ #include "radio/radio.hpp"
+ #include "thread/key_manager.hpp"
++#if (defined(BRCM_OPENTHREAD_HDLC_LOG_ENABLE) && (BRCM_OPENTHREAD_HDLC_LOG_ENABLE))
++#include "brcm_spinel_log.h"
++#endif
+ 
+ #ifndef MS_PER_S
+ #define MS_PER_S 1000
+@@ -580,6 +593,9 @@ void RadioSpinel<InterfaceType, ProcessContextType>::HandleNotification(const ui
+     otError           error = OT_ERROR_NONE;
+ 
+     unpacked = spinel_datatype_unpack(aFrame, aLength, "CiiD", &header, &cmd, &key, &data, &len);
++#if (defined(BRCM_OPENTHREAD_HDLC_LOG_ENABLE) && (BRCM_OPENTHREAD_HDLC_LOG_ENABLE))
++    spinel_brcm_LogMsg(false, header, cmd, key);
++#endif /* BRCM_OPENTHREAD_HDLC_LOG_ENABLE */
+     VerifyOrExit(unpacked > 0, error = OT_ERROR_PARSE);
+     VerifyOrExit(SPINEL_HEADER_GET_TID(header) == 0, error = OT_ERROR_PARSE);
+     VerifyOrExit(cmd == SPINEL_CMD_PROP_VALUE_IS);
+@@ -602,6 +618,11 @@ void RadioSpinel<InterfaceType, ProcessContextType>::HandleResponse(const uint8_
+     otError           error  = OT_ERROR_NONE;
+ 
+     rval = spinel_datatype_unpack(aBuffer, aLength, "CiiD", &header, &cmd, &key, &data, &len);
++
++#if (defined(BRCM_OPENTHREAD_HDLC_LOG_ENABLE) && (BRCM_OPENTHREAD_HDLC_LOG_ENABLE))
++    spinel_brcm_LogMsg(false, header, cmd, key);
++#endif /* BRCM_OPENTHREAD_HDLC_LOG_ENABLE */
++
+     VerifyOrExit(rval > 0 && cmd >= SPINEL_CMD_PROP_VALUE_IS && cmd <= SPINEL_CMD_PROP_VALUE_REMOVED,
+                  error = OT_ERROR_PARSE);
+ 
+@@ -1787,6 +1808,10 @@ otError RadioSpinel<InterfaceType, ProcessContextType>::SendCommand(uint32_t
+     packed = spinel_datatype_pack(buffer, sizeof(buffer), "Cii", SPINEL_HEADER_FLAG | SPINEL_HEADER_IID_0 | tid,
+                                   aCommand, aKey);
+ 
++#if (defined(BRCM_OPENTHREAD_HDLC_LOG_ENABLE) && (BRCM_OPENTHREAD_HDLC_LOG_ENABLE))
++    spinel_brcm_LogMsg(true, buffer[0], aCommand, aKey);
++#endif /* BRCM_OPENTHREAD_HDLC_LOG_ENABLE */
++
+     VerifyOrExit(packed > 0 && static_cast<size_t>(packed) <= sizeof(buffer), error = OT_ERROR_NO_BUFS);
+ 
+     offset = static_cast<uint16_t>(packed);
+@@ -1956,10 +1981,27 @@ void RadioSpinel<InterfaceType, ProcessContextType>::HandleTransmitDone(uint32_t
+         unpacked = spinel_datatype_unpack(aBuffer, aLength, SPINEL_DATATYPE_UINT8_S SPINEL_DATATYPE_UINT32_S, &keyId,
+                                           &frameCounter);
+         VerifyOrExit(unpacked > 0, error = OT_ERROR_PARSE);
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE) // Vendor TxDone fields
++        aBuffer += unpacked;
++        aLength -= static_cast<uint16_t>(unpacked);
++#endif // BRCM_OPENTHREAD_ENABLE
++
+         static_cast<Mac::TxFrame *>(mTransmitFrame)->SetKeyId(keyId);
+         static_cast<Mac::TxFrame *>(mTransmitFrame)->SetFrameCounter(frameCounter);
+     }
+ 
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE) // Vendor TxDone fields
++    {
++        uint8_t txRetryCount;
++        int8_t  txPower;
++        static_cast<Mac::TxFrame *>(mTransmitFrame)->mInfo.mTxInfo.mBrcmRetryCount = 0xFF;
++        static_cast<Mac::TxFrame *>(mTransmitFrame)->mInfo.mTxInfo.mBrcmTxPower    = -127;
++        unpacked = spinel_datatype_unpack(aBuffer, aLength, SPINEL_DATATYPE_UINT8_S SPINEL_DATATYPE_INT8_S, &txRetryCount, &txPower);
++        static_cast<Mac::TxFrame *>(mTransmitFrame)->mInfo.mTxInfo.mBrcmRetryCount = txRetryCount;
++        static_cast<Mac::TxFrame *>(mTransmitFrame)->mInfo.mTxInfo.mBrcmTxPower    = txPower;
++    }
++#endif // BRCM_OPENTHREAD_ENABLE
++
+ exit:
+     mState   = kStateTransmitDone;
+     mTxError = error;
+diff --git a/src/posix/main.c b/src/posix/main.c
+index 9b81e2d0f..a8de7af60 100644
+--- a/src/posix/main.c
++++ b/src/posix/main.c
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *  Copyright (c) 2018, The OpenThread Authors.
+  *  All rights reserved.
+@@ -67,6 +77,9 @@
+ #include <lib/platform/exit_code.h>
+ #include <openthread/openthread-system.h>
+ #include <openthread/platform/misc.h>
++#if (defined(BRCM_OPENTHREAD_HDLC_LOG_ENABLE) && (BRCM_OPENTHREAD_HDLC_LOG_ENABLE))
++#include "lib/spinel/brcm_spinel_log.h"
++#endif // BRCM_OPENTHREAD_HDLC_LOG_ENABLE
+ 
+ #include "lib/platform/reset_util.h"
+ 
+@@ -377,6 +390,10 @@ int main(int argc, char *argv[])
+     setlogmask(setlogmask(0) & LOG_UPTO(LOG_DEBUG));
+     instance = InitInstance(&config);
+ 
++#if (defined(BRCM_OPENTHREAD_HDLC_LOG_ENABLE) && (BRCM_OPENTHREAD_HDLC_LOG_ENABLE))
++    spinel_brcm_flags = (SPINEL_BRCM_FL_LOG_HDLC_ENABLE | SPINEL_BRCM_FL_LOG_SPINEL_ENABLE);
++#endif
++
+ #if !OPENTHREAD_POSIX_CONFIG_DAEMON_ENABLE
+     otAppCliInit(instance);
+ #endif
+diff --git a/src/posix/platform/CMakeLists.txt b/src/posix/platform/CMakeLists.txt
+index 0a44c88a2..66a888f9c 100644
+--- a/src/posix/platform/CMakeLists.txt
++++ b/src/posix/platform/CMakeLists.txt
+@@ -1,3 +1,13 @@
++#/*****************************************************************************
++# * Copyright (c) 2023, Broadcom Inc.                                         *
++# *                                                                           *
++# * All Rights Reserved.                                                      *
++# *                                                                           *
++# * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++# * the contents of this file may not be disclosed to third parties, copied   *
++# * or duplicated in any form, in whole or in part, without the prior         *
++# * written permission of Broadcom Inc.                                       *
++# *****************************************************************************/
+ #
+ #  Copyright (c) 2019, The OpenThread Authors.
+ #  All rights reserved.
+@@ -128,6 +138,8 @@ add_library(openthread-posix
+     udp.cpp
+     utils.cpp
+     virtual_time.cpp
++    brcm_radio_spinel.cpp
++    brcm_radio_spinel_csl.cpp
+     ${OT_POSIX_CONFIG_RCP_VENDOR_INTERFACE}
+ )
+ 
+diff --git a/src/posix/platform/Makefile.am b/src/posix/platform/Makefile.am
+index ae5102306..c00056e17 100644
+--- a/src/posix/platform/Makefile.am
++++ b/src/posix/platform/Makefile.am
+@@ -1,3 +1,13 @@
++#/*****************************************************************************
++# * Copyright (c) 2023, Broadcom Inc.                                         *
++# *                                                                           *
++# * All Rights Reserved.                                                      *
++# *                                                                           *
++# * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++# * the contents of this file may not be disclosed to third parties, copied   *
++# * or duplicated in any form, in whole or in part, without the prior         *
++# * written permission of Broadcom Inc.                                       *
++# *****************************************************************************/
+ #
+ #  Copyright (c) 2016-2018, The OpenThread Authors.
+ #  All rights reserved.
+@@ -46,6 +56,8 @@ libopenthread_posix_a_CPPFLAGS                                = \
+ libopenthread_posix_a_SOURCES             = \
+     alarm.cpp                               \
+     backbone.cpp                            \
++    brcm_radio_spinel.cpp                   \
++    brcm_radio_spinel_csl.cpp               \
+     backtrace.cpp                           \
+     config_file.cpp                         \
+     daemon.cpp                              \
+diff --git a/src/posix/platform/brcm_radio_spinel.cpp b/src/posix/platform/brcm_radio_spinel.cpp
+new file mode 100755
+index 000000000..591d2a4e2
+--- /dev/null
++++ b/src/posix/platform/brcm_radio_spinel.cpp
+@@ -0,0 +1,80 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
++
++#include "platform-posix.h"
++
++
++#include <string.h>
++#include <sys/stat.h>
++
++#include "common/new.hpp"
++#include "lib/spinel/radio_spinel.hpp"
++#include "posix/platform/radio.hpp"
++#include "hdlc_interface.hpp"
++#include "hdlc_interface.hpp"
++
++
++#include "../../../examples/platforms/brcm/include/brcm_radio.h"
++#include "lib/spinel/brcm_spinel_defs.h"
++
++extern ot::Spinel::RadioSpinel<ot::Posix::HdlcInterface, RadioProcessContext> sRadioSpinel;
++
++
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE)
++
++#define BRCM_RADIO_SPINEL_TEMPSTR_MAXLEN    256
++uint8_t brcm_radio_spinel_tempstr[BRCM_RADIO_SPINEL_TEMPSTR_MAXLEN];
++
++BRCM_SPINEL_M154_STATS_t brcm_spinel_m154_stats;
++
++/* Send PROP_SET(SPINEL_PROP_BRCM_ENERGY_SCAN) */
++void otPlatBrcmEnergyScan(otInstance *aInstance, uint32_t aScanMask, uint16_t aScanDuration)
++{
++    OT_UNUSED_VARIABLE(aInstance);
++
++    SuccessOrDie(sRadioSpinel.Set(SPINEL_PROP_BRCM_ENERGY_SCAN,
++            SPINEL_DATATYPE_UINT32_S SPINEL_DATATYPE_UINT16_S,
++            aScanMask,
++            aScanDuration));
++}
++
++extern "C" void otPlatRadioSpinelLoopback(otInstance *aInstance, const uint8_t *aData, uint16_t aDataLen)
++{
++    OT_UNUSED_VARIABLE(aInstance);
++
++    SuccessOrDie(sRadioSpinel.Set(SPINEL_PROP_BRCM_LOCAL_LOOPBACK,
++            SPINEL_DATATYPE_DATA_WLEN_S,
++            aData,
++            aDataLen));
++}
++
++
++
++/* Set the 802.15.4 duty cycle configuration */
++void otPlatRadioBrcmSetThreadDutyCycle(otInstance *aInstance, const uint32_t high_duty_cycle, const uint32_t period)
++{
++    OT_UNUSED_VARIABLE(aInstance);
++    SuccessOrDie(sRadioSpinel.Set(SPINEL_PROP_BRCM_THREAD_DUTY_CYCLE,
++            (SPINEL_DATATYPE_UINT32_S SPINEL_DATATYPE_UINT32_S),
++            high_duty_cycle, period));
++}
++
++/* Read current 802.15.4 duty cycle configuration */
++void otPlatRadioBrcmGetThreadDutyCycle(otInstance *aInstance, uint32_t *high_duty_cycle, uint32_t *period)
++{
++    OT_UNUSED_VARIABLE(aInstance);
++
++    SuccessOrDie(sRadioSpinel.Get(SPINEL_PROP_BRCM_THREAD_DUTY_CYCLE,
++            (SPINEL_DATATYPE_UINT32_S SPINEL_DATATYPE_UINT32_S),
++            high_duty_cycle, period));
++}
++
++#endif // BRCM_OPENTHREAD_ENABLE
+diff --git a/src/posix/platform/brcm_radio_spinel_csl.cpp b/src/posix/platform/brcm_radio_spinel_csl.cpp
+new file mode 100755
+index 000000000..db228f527
+--- /dev/null
++++ b/src/posix/platform/brcm_radio_spinel_csl.cpp
+@@ -0,0 +1,87 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
++
++/**
++ * @file radio_brcm_csl.cpp
++ * @brief Implementation for sending CSL spinel messages (Broadcom-specific)
++ */
++#include "platform-posix.h"
++#include "lib/spinel/radio_spinel.hpp"
++#include "posix/platform/radio.hpp"
++#include "hdlc_interface.hpp"
++#include "lib/spinel/brcm_spinel_defs.h"
++
++extern ot::Spinel::RadioSpinel<ot::Posix::HdlcInterface, RadioProcessContext> sRadioSpinel;
++
++#if (defined(BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) && BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE)
++/************************************************************************
++ * BRCM: Add support for CSL spinel properties in RCP Mode
++ */
++otError otPlatRadioEnableCsl(otInstance *aInstance, uint32_t aCslPeriod, otShortAddress aShortAddr, const otExtAddress *aExtAddr)
++{
++    OT_UNUSED_VARIABLE(aInstance);
++    OT_UNUSED_VARIABLE(aShortAddr);     // TODO: update SPINEL_PROP_BRCM_CSL_ENABLE to include new aShortAddr parameter
++
++    return sRadioSpinel.Set(SPINEL_PROP_BRCM_CSL_ENABLE,
++            SPINEL_DATATYPE_UINT16_S SPINEL_DATATYPE_EUI64_S,
++            (uint16_t)aCslPeriod,
++            aExtAddr);
++}
++
++/**
++ * Update CSL sample time in radio driver.
++ *
++ * Sample time is stored in radio driver as a copy to calculate phase when sending ACK with CSL IE.
++ *
++ * @param[in]  aInstance         The OpenThread instance structure.
++ * @param[in]  aCslSampleTime    The latest sample time.
++ *
++ * NOTE: stubbed BRCM CSL_RECEIVER, since timing is handled internally by the RCP
++ *
++ */
++void otPlatRadioUpdateCslSampleTime(otInstance *aInstance, uint32_t aCslSampleTime)
++{
++    OT_UNUSED_VARIABLE(aInstance);
++    OT_UNUSED_VARIABLE(aCslSampleTime);
++    return;
++}
++
++/* Set CSL parent clock accuracy (in ppm), as notified by parent using the CSL Clock Accuracy TLV */
++void otPlatRadioBrcmSetCslParentClockAccuracy(otInstance *aInstance, uint8_t aCslParentAccuracy)
++{
++    OT_UNUSED_VARIABLE(aInstance);
++
++    SuccessOrDie(sRadioSpinel.Set(SPINEL_PROP_BRCM_CSL_PARENT_CLOCK_ACCURACY,
++            SPINEL_DATATYPE_UINT8_S,
++            aCslParentAccuracy));
++}
++
++/* Set CSL parent clock uncertainty (in us units), as notified by parent using the CSL Clock Accuracy TLV */
++void otPlatRadioBrcmSetCslParentUncertainty(otInstance *aInstance, uint8_t aCslParentUncert)
++{
++    OT_UNUSED_VARIABLE(aInstance);
++
++    SuccessOrDie(sRadioSpinel.Set(SPINEL_PROP_BRCM_CSL_PARENT_UNCERTAINTY,
++            SPINEL_DATATYPE_UINT8_S,
++            aCslParentUncert));
++}
++#endif /* BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE */
++
++
++#ifdef BRCM_OPENTHREAD_CSL_TRANSMITTER_ENABLE
++/* Disable CSL transmission */
++void otPlatRadioBrcmCslTransmitDisable(uint16_t aShortAddr, otExtAddress *aExtAddr)
++{
++    sRadioSpinel.Set(SPINEL_PROP_BRCM_CSL_TX_DISABLE,
++            SPINEL_DATATYPE_UINT16_S SPINEL_DATATYPE_EUI64_S,
++            aShortAddr, aExtAddr);
++}
++#endif /* BRCM_OPENTHREAD_CSL_TRANSMITTER_ENABLE */
+diff --git a/src/posix/platform/hdlc_interface.cpp b/src/posix/platform/hdlc_interface.cpp
+index 9315bab4c..213b668e6 100644
+--- a/src/posix/platform/hdlc_interface.cpp
++++ b/src/posix/platform/hdlc_interface.cpp
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *  Copyright (c) 2018, The OpenThread Authors.
+  *  All rights reserved.
+@@ -61,6 +71,17 @@
+ 
+ #include "common/code_utils.hpp"
+ 
++#ifdef BRCM_OPENTHREAD_ENABLE    // BRCM_SPINEL_DAEMON
++#include "common/logging.hpp"
++#include "lib/spinel/brcm_spinel_log.h"
++#include <sys/un.h>
++#define SPINELDAENMON_SOCKET_BASE_DIR   "/tmp"
++#endif    // BRCM_SPINEL_DAEMON
++
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++extern "C" uint8_t g_BrcmCoreDumpInProgress;
++#endif // BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++
+ #ifdef __APPLE__
+ 
+ #ifndef B230400
+@@ -148,6 +169,40 @@ otError HdlcInterface::Init(const Url::Url &aRadioUrl)
+ 
+     VerifyOrExit(mSockFd == -1, error = OT_ERROR_ALREADY);
+ 
++#ifdef BRCM_OPENTHREAD_ENABLE // BRCM_SPINEL_DAEMON
++    if (strstr(aRadioUrl.GetProtocol(), "daemon") != 0)
++    {
++        struct sockaddr_un sockname;
++        int rval;
++
++        if ((mSockFd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
++        {
++            otLogCritPlat("Could not create socket for connecting to BRCM spinel daemon");
++            DieNow(OT_EXIT_RADIO_SPINEL_NO_RESPONSE);
++        }
++
++        /* Get instance */
++
++        memset(&sockname, 0, sizeof(struct sockaddr_un));
++        sockname.sun_family = AF_UNIX;
++        snprintf(sockname.sun_path, sizeof(sockname.sun_path), "%s/%s", SPINELDAENMON_SOCKET_BASE_DIR, aRadioUrl.GetPath());
++
++        if (connect(mSockFd, (struct sockaddr*)&sockname, sizeof(struct sockaddr_un)) == -1)
++        {
++            syslog(LOG_CRIT, "Unable to connect to socket %s/%s", SPINELDAENMON_SOCKET_BASE_DIR, aRadioUrl.GetPath());
++            DieNow(OT_EXIT_RADIO_SPINEL_NO_RESPONSE);
++        }
++
++        VerifyOrDie((rval = fcntl(mSockFd, F_GETFL)) != -1, OT_EXIT_ERROR_ERRNO);
++        VerifyOrDie((rval = fcntl(mSockFd, F_SETFL, rval | O_NONBLOCK | O_CLOEXEC)) != -1, OT_EXIT_ERROR_ERRNO);
++
++        mRadioUrl = &aRadioUrl;
++
++
++        ExitNow();
++    }
++#endif  // BRCM_SPINEL_DAEMON
++
+     VerifyOrDie(stat(aRadioUrl.GetPath(), &st) == 0, OT_EXIT_INVALID_ARGUMENTS);
+ 
+     if (S_ISCHR(st.st_mode))
+@@ -187,12 +242,82 @@ void HdlcInterface::Read(void)
+ 
+     if (rval > 0)
+     {
++#if (defined(BRCM_OPENTHREAD_HDLC_LOG_ENABLE) && (BRCM_OPENTHREAD_HDLC_LOG_ENABLE))
++        spinel_brcm_LogBuf("HdlcInterface::Read", (char *)buffer, (int)rval);
++#endif /* BRCM_OPENTHREAD_HDLC_LOG_ENABLE */
+         Decode(buffer, static_cast<uint16_t>(rval));
+     }
+     else if ((rval < 0) && (errno != EAGAIN) && (errno != EINTR))
+     {
+         DieNow(OT_EXIT_ERROR_ERRNO);
+     }
++
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++    // If coredump is in progress, read the reset of the coredump VSEs
++    while (g_BrcmCoreDumpInProgress)
++    {
++        struct timeval timeout;
++        timeout.tv_sec = static_cast<time_t>(10);    // Wait time in between DBFW VSEs
++
++        fd_set read_fds;
++        fd_set error_fds;
++
++        FD_ZERO(&read_fds);
++        FD_ZERO(&error_fds);
++        FD_SET(mSockFd, &read_fds);
++        FD_SET(mSockFd, &error_fds);
++
++        rval = select(mSockFd + 1, &read_fds, nullptr, &error_fds, &timeout);
++
++        //printf("HdlcInterface::Read rval(%zd)\n", rval);
++        //printf("HdlcInterface::Read rval(%zd), timeout.tv_sec:%ld\n", rval, timeout.tv_sec);
++
++        if (rval > 0)
++        {
++            if (FD_ISSET(mSockFd, &read_fds))
++            {
++                rval = read(mSockFd, buffer, sizeof(buffer));
++
++                if (rval > 0)
++                {
++                    Decode(buffer, static_cast<uint16_t>(rval));
++                }
++                else if ((rval < 0) && (errno != EAGAIN) && (errno != EINTR))
++                {
++                    DieNow(OT_EXIT_ERROR_ERRNO);
++                }
++            }
++            else
++            {
++                DieNow(OT_EXIT_FAILURE);
++            }
++        }
++        else
++        {
++            /*
++            EBADF
++            One or more of the file descriptor sets specified a file descriptor that is not a valid open file descriptor or
++            specified a file descriptor that does not support selection.
++
++            EINTR
++            A signal interrupted the call or the time limit expired.
++
++            EISDIR
++            One or more the file descriptor sets specified a file descriptor that refers to an open directory.
++
++            EINVAL A component of timeout is outside the acceptable range. */
++
++            printf("HdlcInterface::Read ENOENT:%d, EBADF:%d, EINTR:%d, EISDIR:%d, EINVAL:%d\n", ENOENT, EBADF, EINTR, EISDIR, EINVAL);
++            printf("HdlcInterface::Read rval(%zd), timeout.tv_sec:%ld, errno:%d\n", rval, timeout.tv_sec , errno);
++            if(timeout.tv_sec)
++            {
++                printf("timer is not expired, continue to read\n");
++                continue;
++            }
++            DieNow(OT_EXIT_RADIO_SPINEL_NO_RESPONSE);
++        }
++    }
++#endif // BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
+ }
+ 
+ void HdlcInterface::Decode(const uint8_t *aBuffer, uint16_t aLength) { mHdlcDecoder.Decode(aBuffer, aLength); }
+@@ -219,6 +344,11 @@ otError HdlcInterface::Write(const uint8_t *aFrame, uint16_t aLength)
+ #if OPENTHREAD_POSIX_VIRTUAL_TIME
+     virtualTimeSendRadioSpinelWriteEvent(aFrame, aLength);
+ #else
++
++#if (defined(BRCM_OPENTHREAD_HDLC_LOG_ENABLE) && (BRCM_OPENTHREAD_HDLC_LOG_ENABLE))
++    spinel_brcm_LogBuf("HdlcInterface::Write", (char *)aFrame, (int)aLength);
++#endif /* BRCM_OPENTHREAD_HDLC_LOG_ENABLE */
++
+     while (aLength)
+     {
+         ssize_t rval = write(mSockFd, aFrame, aLength);
+@@ -571,6 +701,11 @@ int HdlcInterface::OpenFile(const Url::Url &aRadioUrl)
+             tios.c_cflag |= CRTSCTS;
+         }
+ 
++#if (defined(BRCM_OPENTHREAD_NCP_SPINEL_RCP) && (BRCM_OPENTHREAD_NCP_SPINEL_RCP))
++        // Always Enable rts/cts for brcm uart RCP
++        tios.c_cflag |= CRTSCTS;
++#endif
++
+         VerifyOrExit((rval = cfsetspeed(&tios, static_cast<speed_t>(speed))) == 0, perror("cfsetspeed"));
+         VerifyOrExit((rval = tcsetattr(fd, TCSANOW, &tios)) == 0, perror("tcsetattr"));
+         VerifyOrExit((rval = tcflush(fd, TCIOFLUSH)) == 0);
+diff --git a/src/posix/platform/openthread-core-posix-config.h b/src/posix/platform/openthread-core-posix-config.h
+index 0a3cd2048..ddb25e63f 100644
+--- a/src/posix/platform/openthread-core-posix-config.h
++++ b/src/posix/platform/openthread-core-posix-config.h
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *  Copyright (c) 2017, The OpenThread Authors.
+  *  All rights reserved.
+@@ -157,6 +167,15 @@
+ 
+ #endif
+ 
++/**
++ * @def OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
++ *
++ * Define to 1 if you want to enable microsecond backoff timer implemented in platform.
++ *
++ */
++#ifndef OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE
++#define OPENTHREAD_CONFIG_PLATFORM_USEC_TIMER_ENABLE 1
++#endif
+ /**
+  * @def OPENTHREAD_CONFIG_LOG_MAX_SIZE
+  *
+@@ -227,6 +246,31 @@
+ #define OPENTHREAD_CONFIG_IP6_MAX_EXT_MCAST_ADDRS 8
+ #endif
+ 
++/* [BRCM] Broadcom-specific configuration items */
++/**
++ * @def BRCM_OPENTHREAD_ENABLE
++ *
++ * Define to 1 to enable brcm-specific features
++ *
++ */
++#define BRCM_OPENTHREAD_ENABLE 1
++
++/**
++ * @def BRCM_OPENTHREAD_HDLC_LOG_ENABLE
++ *
++ * Define to 1 to enable hdlc and spinel logging
++ *
++ */
++#define BRCM_OPENTHREAD_HDLC_LOG_ENABLE 1
++
++/**
++ * @def BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++ *
++ * Define to 1 to enable parsing of BT HCI VSEs in HDLC and redirecting
++ *    DBFW coredump VSEs to a file
++ *
++ */
++#define BRCM_OPENTHREAD_REDIRECT_DBFW_VSE 1
+ /**
+  * @def OPENTHREAD_CONFIG_HISTORY_TRACKER_ENABLE
+  *
+diff --git a/src/posix/platform/radio.cpp b/src/posix/platform/radio.cpp
+index 0134e28d2..e6564c2c4 100644
+--- a/src/posix/platform/radio.cpp
++++ b/src/posix/platform/radio.cpp
+@@ -1,3 +1,13 @@
++/*****************************************************************************
++ * Copyright (c) 2023, Broadcom Inc.                                         *
++ *                                                                           *
++ * All Rights Reserved.                                                      *
++ *                                                                           *
++ * This is UNPUBLISHED PROPRIETARY SOURCE CODE of Broadcom Inc.;             *
++ * the contents of this file may not be disclosed to third parties, copied   *
++ * or duplicated in any form, in whole or in part, without the prior         *
++ * written permission of Broadcom Inc.                                       *
++ *****************************************************************************/
+ /*
+  *  Copyright (c) 2020, The OpenThread Authors.
+  *  All rights reserved.
+@@ -49,7 +59,11 @@
+ #if OPENTHREAD_POSIX_VIRTUAL_TIME
+ static ot::Spinel::RadioSpinel<ot::Posix::HdlcInterface, VirtualTimeEvent> sRadioSpinel;
+ #else
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE) // Make sRadioSpinel non-static for BRCM to allow access in brcm_radio_spinel.cpp
++ot::Spinel::RadioSpinel<ot::Posix::HdlcInterface, RadioProcessContext> sRadioSpinel;
++#else  // !BRCM_OPENTHREAD_ENABLE
+ static ot::Spinel::RadioSpinel<ot::Posix::HdlcInterface, RadioProcessContext> sRadioSpinel;
++#endif // !BRCM_OPENTHREAD_ENABLE
+ #endif // OPENTHREAD_POSIX_VIRTUAL_TIME
+ #elif OPENTHREAD_POSIX_CONFIG_RCP_BUS == OT_POSIX_RCP_BUS_SPI
+ #include "spi_interface.hpp"
+-- 
+2.38.1
+

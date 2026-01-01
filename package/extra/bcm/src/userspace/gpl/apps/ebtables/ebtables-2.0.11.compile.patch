@@ -1,0 +1,223 @@
+diff -Naur orig_ebtables-2.0.11/Makefile.in ebtables-2.0.11/Makefile.in
+--- orig_ebtables-2.0.11/Makefile.in	2019-12-02 23:27:46.000000000 +0800
++++ ebtables-2.0.11/Makefile.in	2023-08-30 14:09:23.936885900 +0800
+@@ -167,9 +167,22 @@
+ 	extensions/libebtc_la-ebt_standard.lo \
+ 	extensions/libebtc_la-ebt_stp.lo \
+ 	extensions/libebtc_la-ebt_string.lo \
+-	extensions/libebtc_la-ebt_ulog.lo \
+ 	extensions/libebtc_la-ebt_vlan.lo \
+-	extensions/libebtc_la-ebt_AUDIT.lo \
++	extensions/libebtc_la-ebt_qos_map.lo \
++	extensions/libebtc_la-ebt_time.lo \
++	extensions/libebtc_la-ebt_ftos.lo \
++	extensions/libebtc_la-ebt_skiplog.lo \
++	extensions/libebtc_la-ebt_skbvlan.lo \
++	extensions/libebtc_la-ebt_blog.lo \
++	extensions/libebtc_la-ebt_reject.lo \
++	extensions/libebtc_la-ebt_ip_extend.lo \
++	extensions/libebtc_la-ebt_ip6_extend.lo \
++	extensions/libebtc_la-ebt_u32.lo \
++	extensions/libebtc_la-ebt_dscp_t.lo \
++	extensions/libebtc_la-ebt_skb_priority.lo \
++	extensions/libebtc_la-ebt_vtag.lo \
++	extensions/libebtc_la-ebt_fsmark.lo \
++	extensions/libebtc_la-ebt_wmm_mark.lo \
+ 	extensions/libebtc_la-ebtable_broute.lo \
+ 	extensions/libebtc_la-ebtable_filter.lo \
+ 	extensions/libebtc_la-ebtable_nat.lo
+@@ -216,7 +229,7 @@
+ am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
+ am__v_at_0 = @
+ am__v_at_1 = 
+-DEFAULT_INCLUDES = -I.@am__isrc@
++DEFAULT_INCLUDES = -I.@am__isrc@ -I$(KERNEL_INCLUDES)
+ depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
+ am__depfiles_maybe = depfiles
+ am__mv = mv -f
+@@ -436,7 +449,6 @@
+ AM_CPPFLAGS = ${regular_CPPFLAGS} -I${top_srcdir}/include \
+ 	-DPROGVERSION=\"${PACKAGE_VERSION}\" -DPROGNAME=\"${PACKAGE_NAME}\" \
+ 	-DPROGDATE=\"${PROGDATE}\" \
+-	-D_PATH_ETHERTYPES=\"${sysconfdir}/ethertypes\" \
+ 	-DLOCKFILE=\"${LOCKFILE}\" \
+ 	-DEBTD_ARGC_MAX=${EBTD_ARGC_MAX} -DEBTD_CMDLINE_MAXLN=${EBTD_CMDLINE_MAXLN} \
+ 	-DEBTD_PIPE=\"${PIPE}\" -DEBTD_PIPE_DIR=\"${PIPE_DIR}\"
+@@ -456,6 +468,10 @@
+ 	extensions/ebt_pkttype.c extensions/ebt_redirect.c \
+ 	extensions/ebt_standard.c extensions/ebt_stp.c extensions/ebt_string.c \
+ 	extensions/ebt_ulog.c extensions/ebt_vlan.c extensions/ebt_AUDIT.c \
++	extensions/ebt_qos_map.c extensions/ebt_time.c extensions/ebt_ftos.c \
++	extensions/ebt_skiplog.c extensions/ebt_skbvlan.c extensions/ebt_blog.c extensions/ebt_fsmark.c \
++	extensions/ebt_reject.c extensions/ebt_ip_extend.c extensions/ebt_ip6_extend.c \
++	extensions/ebt_u32.c extensions/ebt_dscp_t.c extensions/ebt_skb_priority.c extensions/ebt_vtag.c extensions/ebt_wmm_mark.c \
+ 	extensions/ebtable_broute.c extensions/ebtable_filter.c \
+ 	extensions/ebtable_nat.c
+ 
+@@ -603,6 +619,32 @@
+ 	extensions/$(DEPDIR)/$(am__dirstamp)
+ extensions/libebtc_la-ebt_vlan.lo: extensions/$(am__dirstamp) \
+ 	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_qos_map.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_time.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_ftos.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_skiplog.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_skbvlan.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_blog.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_reject.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_ip_extend.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_ip6_extend.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_u32.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_dscp_t.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_skb_priority.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
++extensions/libebtc_la-ebt_ip6_wmm_mark.lo: extensions/$(am__dirstamp) \
++	extensions/$(DEPDIR)/$(am__dirstamp)
+ extensions/libebtc_la-ebt_AUDIT.lo: extensions/$(am__dirstamp) \
+ 	extensions/$(DEPDIR)/$(am__dirstamp)
+ extensions/libebtc_la-ebtable_broute.lo: extensions/$(am__dirstamp) \
+@@ -772,6 +814,21 @@
+ @AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_string.Plo@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_ulog.Plo@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_vlan.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_qos_map.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_time.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_ftos.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_skiplog.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_skbvlan.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_blog.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_reject.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_ip_extend.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_ip6_extend.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_u32.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_dscp_t.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_skb_priority.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_vtag.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_fsmark.Plo@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebt_wmm_mark.Plo@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebtable_broute.Plo@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebtable_filter.Plo@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@extensions/$(DEPDIR)/libebtc_la-ebtable_nat.Plo@am__quote@
+@@ -968,6 +1025,111 @@
+ @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+ @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_vlan.lo `test -f 'extensions/ebt_vlan.c' || echo '$(srcdir)/'`extensions/ebt_vlan.c
+ 
++extensions/libebtc_la-ebt_qos_map.lo: extensions/ebt_qos_map.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_qos_map.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_qos_map.Tpo -c -o extensions/libebtc_la-ebt_qos_map.lo `test -f 'extensions/ebt_qos_map.c' || echo '$(srcdir)/'`extensions/ebt_qos_map.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_qos_map.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_qos_map.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_qos_map.c' object='extensions/libebtc_la-ebt_qos_map.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_qos_map.lo `test -f 'extensions/ebt_qos_map.c' || echo '$(srcdir)/'`extensions/ebt_qos_map.c
++
++extensions/libebtc_la-ebt_time.lo: extensions/ebt_time.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_time.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_time.Tpo -c -o extensions/libebtc_la-ebt_time.lo `test -f 'extensions/ebt_time.c' || echo '$(srcdir)/'`extensions/ebt_time.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_time.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_time.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_time.c' object='extensions/libebtc_la-ebt_time.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_time.lo `test -f 'extensions/ebt_time.c' || echo '$(srcdir)/'`extensions/ebt_time.c
++
++extensions/libebtc_la-ebt_ftos.lo: extensions/ebt_ftos.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_ftos.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_ftos.Tpo -c -o extensions/libebtc_la-ebt_ftos.lo `test -f 'extensions/ebt_ftos.c' || echo '$(srcdir)/'`extensions/ebt_ftos.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_ftos.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_ftos.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_ftos.c' object='extensions/libebtc_la-ebt_ftos.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_ftos.lo `test -f 'extensions/ebt_ftos.c' || echo '$(srcdir)/'`extensions/ebt_ftos.c
++
++extensions/libebtc_la-ebt_skiplog.lo: extensions/ebt_skiplog.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_skiplog.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_skiplog.Tpo -c -o extensions/libebtc_la-ebt_skiplog.lo `test -f 'extensions/ebt_skiplog.c' || echo '$(srcdir)/'`extensions/ebt_skiplog.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_skiplog.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_skiplog.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_skiplog.c' object='extensions/libebtc_la-ebt_skiplog.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_skiplog.lo `test -f 'extensions/ebt_skiplog.c' || echo '$(srcdir)/'`extensions/ebt_skiplog.c
++
++extensions/libebtc_la-ebt_skbvlan.lo: extensions/ebt_skbvlan.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_skbvlan.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_skbvlan.Tpo -c -o extensions/libebtc_la-ebt_skbvlan.lo `test -f 'extensions/ebt_skbvlan.c' || echo '$(srcdir)/'`extensions/ebt_skbvlan.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_skbvlan.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_skbvlan.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_skbvlan.c' object='extensions/libebtc_la-ebt_skbvlan.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_skbvlan.lo `test -f 'extensions/ebt_skbvlan.c' || echo '$(srcdir)/'`extensions/ebt_skbvlan.c
++
++extensions/libebtc_la-ebt_blog.lo: extensions/ebt_blog.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_blog.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_blog.Tpo -c -o extensions/libebtc_la-ebt_blog.lo `test -f 'extensions/ebt_blog.c' || echo '$(srcdir)/'`extensions/ebt_blog.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_blog.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_blog.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_blog.c' object='extensions/libebtc_la-ebt_blog.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_blog.lo `test -f 'extensions/ebt_blog.c' || echo '$(srcdir)/'`extensions/ebt_blog.c
++
++extensions/libebtc_la-ebt_reject.lo: extensions/ebt_reject.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_reject.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_reject.Tpo -c -o extensions/libebtc_la-ebt_reject.lo `test -f 'extensions/ebt_reject.c' || echo '$(srcdir)/'`extensions/ebt_reject.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_reject.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_reject.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_reject.c' object='extensions/libebtc_la-ebt_reject.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_reject.lo `test -f 'extensions/ebt_reject.c' || echo '$(srcdir)/'`extensions/ebt_reject.c
++
++extensions/libebtc_la-ebt_ip_extend.lo: extensions/ebt_ip_extend.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_ip_extend.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_ip_extend.Tpo -c -o extensions/libebtc_la-ebt_ip_extend.lo `test -f 'extensions/ebt_ip_extend.c' || echo '$(srcdir)/'`extensions/ebt_ip_extend.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_ip_extend.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_ip_extend.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_ip_extend.c' object='extensions/libebtc_la-ebt_ip_extend.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_ip_extend.lo `test -f 'extensions/ebt_ip_extend.c' || echo '$(srcdir)/'`extensions/ebt_ip_extend.c
++
++extensions/libebtc_la-ebt_ip6_extend.lo: extensions/ebt_ip6_extend.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_ip6_extend.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_ip6_extend.Tpo -c -o extensions/libebtc_la-ebt_ip6_extend.lo `test -f 'extensions/ebt_ip6_extend.c' || echo '$(srcdir)/'`extensions/ebt_ip6_extend.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_ip6_extend.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_ip6_extend.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_ip6_extend.c' object='extensions/libebtc_la-ebt_ip6_extend.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_ip6_extend.lo `test -f 'extensions/ebt_ip6_extend.c' || echo '$(srcdir)/'`extensions/ebt_ip6_extend.c
++
++extensions/libebtc_la-ebt_u32.lo: extensions/ebt_u32.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_u32.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_u32.Tpo -c -o extensions/libebtc_la-ebt_u32.lo `test -f 'extensions/ebt_u32.c' || echo '$(srcdir)/'`extensions/ebt_u32.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_u32.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_u32.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_u32.c' object='extensions/libebtc_la-ebt_u32.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_u32.lo `test -f 'extensions/ebt_u32.c' || echo '$(srcdir)/'`extensions/ebt_u32.c
++
++extensions/libebtc_la-ebt_dscp_t.lo: extensions/ebt_dscp_t.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_dscp_t.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_dscp_t.Tpo -c -o extensions/libebtc_la-ebt_dscp_t.lo `test -f 'extensions/ebt_dscp_t.c' || echo '$(srcdir)/'`extensions/ebt_dscp_t.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_dscp_t.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_dscp_t.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_dscp_t.c' object='extensions/libebtc_la-ebt_dscp_t.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_dscp_t.lo `test -f 'extensions/ebt_dscp_t.c' || echo '$(srcdir)/'`extensions/ebt_dscp_t.c
++
++extensions/libebtc_la-ebt_skb_priority.lo: extensions/ebt_skb_priority.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_skb_priority.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_skb_priority.Tpo -c -o extensions/libebtc_la-ebt_skb_priority.lo `test -f 'extensions/ebt_skb_priority.c' || echo '$(srcdir)/'`extensions/ebt_skb_priority.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_skb_priority.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_skb_priority.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_skb_priority.c' object='extensions/libebtc_la-ebt_skb_priority.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_skb_priority.lo `test -f 'extensions/ebt_skb_priority.c' || echo '$(srcdir)/'`extensions/ebt_skb_priority.c
++
++extensions/libebtc_la-ebt_vtag.lo: extensions/ebt_vtag.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_vtag.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_vtag.Tpo -c -o extensions/libebtc_la-ebt_vtag.lo `test -f 'extensions/ebt_vtag.c' || echo '$(srcdir)/'`extensions/ebt_vtag.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_vtag.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_vtag.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_vtag.c' object='extensions/libebtc_la-ebt_vtag.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_vtag.lo `test -f 'extensions/ebt_vtag.c' || echo '$(srcdir)/'`extensions/ebt_vtag.c
++
++extensions/libebtc_la-ebt_fsmark.lo: extensions/ebt_fsmark.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_fsmark.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_fsmark.Tpo -c -o extensions/libebtc_la-ebt_fsmark.lo `test -f 'extensions/ebt_fsmark.c' || echo '$(srcdir)/'`extensions/ebt_fsmark.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_fsmark.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_fsmark.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_fsmark.c' object='extensions/libebtc_la-ebt_fsmark.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_fsmark.lo `test -f 'extensions/ebt_fsmark.c' || echo '$(srcdir)/'`extensions/ebt_fsmark.c
++
++extensions/libebtc_la-ebt_wmm_mark.lo: extensions/ebt_wmm_mark.c
++@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_wmm_mark.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_wmm_mark.Tpo -c -o extensions/libebtc_la-ebt_wmm_mark.lo `test -f 'extensions/ebt_wmm_mark.c' || echo '$(srcdir)/'`extensions/ebt_wmm_mark.c
++@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_wmm_mark.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_wmm_mark.Plo
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='extensions/ebt_wmm_mark.c' object='extensions/libebtc_la-ebt_wmm_mark.lo' libtool=yes @AMDEPBACKSLASH@
++@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
++@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o extensions/libebtc_la-ebt_wmm_mark.lo `test -f 'extensions/ebt_wmm_mark.c' || echo '$(srcdir)/'`extensions/ebt_wmm_mark.c
++
+ extensions/libebtc_la-ebt_AUDIT.lo: extensions/ebt_AUDIT.c
+ @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libebtc_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT extensions/libebtc_la-ebt_AUDIT.lo -MD -MP -MF extensions/$(DEPDIR)/libebtc_la-ebt_AUDIT.Tpo -c -o extensions/libebtc_la-ebt_AUDIT.lo `test -f 'extensions/ebt_AUDIT.c' || echo '$(srcdir)/'`extensions/ebt_AUDIT.c
+ @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) extensions/$(DEPDIR)/libebtc_la-ebt_AUDIT.Tpo extensions/$(DEPDIR)/libebtc_la-ebt_AUDIT.Plo

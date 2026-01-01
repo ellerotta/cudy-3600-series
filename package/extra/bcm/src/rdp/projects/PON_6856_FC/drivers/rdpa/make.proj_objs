@@ -1,0 +1,1 @@
+-include $(PROJECT_DIR)/$(RDP_TARGET)/rdpa/make.proj_fc_4g_pon_objs

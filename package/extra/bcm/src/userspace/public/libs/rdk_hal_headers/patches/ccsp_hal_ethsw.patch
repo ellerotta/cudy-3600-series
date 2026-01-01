@@ -1,0 +1,68 @@
+diff --git a/home/mw890571/rsync8/rdk-2023q2-rdkcentral-GA/halinterface/ccsp_hal_ethsw.h b/ccsp_hal_ethsw.h
+index 382b254..4beb139 100644
+--- a/home/mw890571/rsync8/rdk-2023q2-rdkcentral-GA/halinterface/ccsp_hal_ethsw.h
++++ b/ccsp_hal_ethsw.h
+@@ -711,6 +711,63 @@ GWP_GetEthWanInterfaceName
+ #define UP "up"
+ #define DOWN "down"
+ 
++#if defined (_PLATFORM_BCM_BROADBAND_) || defined (BRCM_BDK_BUILD)
++/*
++The following callback is for the process when ethernet port is UP or Down.
++It's definition and registeration has been removed via RDKB-36621.
++Still keep the APIs for a little time longer to wait the stability.
++*/
++#define DISCONNECTED "disconnected"
++
++typedef INT (*ethsw_ethLinkEventCallback)(CHAR* ifname, CHAR* state);
++void CcspHalEthSw_RegisterLinkEventCallback(ethsw_ethLinkEventCallback callback_proc);
++
++/*
++The following APIs are introduced via customer requirement
++*/
++
++typedef struct
++_CCSP_HAL_ETH_FULL_CFG
++{
++    CCSP_HAL_ETHSW_ADMIN_STATUS adminStatus;
++    CCSP_HAL_ETHSW_DUPLEX_MODE duplexMode;
++    CCSP_HAL_ETHSW_LINK_RATE maxBitRate;
++    CCSP_HAL_ETHSW_LINK_STATUS linkStatus;
++    CCSP_HAL_ETHSW_LINK_RATE currLinkRate;
++    BOOLEAN bEEEPortEnable;
++}
++CCSP_HAL_ETH_FULL_CFG, *PCCSP_HAL_ETH_FULL_CFG;
++
++CCSP_HAL_ETHSW_LINK_STATUS CcspHalExtSw_GetLinkStatus (char *pMacAddr);
++
++int CcspHalEthSwGetEEEPortEnable (CCSP_HAL_ETHSW_PORT PortId, BOOLEAN *enable);
++int CcspHalEthSwSetEEEPortEnable (CCSP_HAL_ETHSW_PORT PortId, BOOLEAN enable);
++
++/* CcspHalEthSwGetPortEntry :  */
++/**
++* @description Retrieve the current port config -- link speed, duplex mode, etc.
++* @param PortId      -- Port ID as defined in CCSP_HAL_ETHSW_PORT
++* @param pEthCfg     -- Receives the current port configuration
++*
++* @return The status of the operation.
++* @retval RETURN_OK if successful.
++* @retval RETURN_ERR if any error is detected
++*
++* @execution Synchronous.
++* @sideeffect None.
++*
++* @note This function must not suspend and must not invoke any blocking system
++* calls. It should probably just send a message to a driver event handler task.
++*
++*/
++INT
++CcspHalEthSwGetPortEntry
++    (
++        CCSP_HAL_ETHSW_PORT         PortId,
++        PCCSP_HAL_ETH_FULL_CFG      pEthCfg
++    );
++#endif
++
+ #endif /* __CCSP_HAL_ETHSW_H__ */
+ 
+ /**

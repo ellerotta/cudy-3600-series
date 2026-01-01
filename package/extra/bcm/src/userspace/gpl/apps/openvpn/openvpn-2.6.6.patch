@@ -1,0 +1,32 @@
+--- ori_openvpn-2.6.6/configure	2023-08-11 14:09:21.000000000 +0800
++++ openvpn-2.6.6/configure	2023-08-25 13:57:13.783297201 +0800
+@@ -11892,8 +11892,8 @@
+     # Set some defaults for GNU ld with shared library support. These
+     # are reset later if shared libraries are not supported. Putting them
+     # here allows them to be overridden if necessary.
+-    runpath_var=LD_RUN_PATH
+-    hardcode_libdir_flag_spec='$wl-rpath $wl$libdir'
++    # runpath_var=LD_RUN_PATH
++    # hardcode_libdir_flag_spec='$wl-rpath $wl$libdir'
+     export_dynamic_flag_spec='$wl--export-dynamic'
+     # ancient GNU ld didn't support --whole-archive et. al.
+     if $LD --help 2>&1 | $GREP 'no-whole-archive' > /dev/null; then
+@@ -17496,6 +17496,8 @@
+ 	esac
+ fi
+ 
++# check if Makefile include "LIBCAPNG_LIBS = -lcap-ng"
++if test -n "$LIBCAPNG_LIBS" ; then
+ case "$host" in
+ 	*-*-linux*)
+ 
+@@ -17588,6 +17590,10 @@
+ 	;;
+ esac
+ 
++else
++printf "libcap-ng not found, ignore HAVE_LIBCAPNG\n"
++fi
++# check LIBCAPNG_LIBS end
+ 
+ if test "${with_crypto_library}" = "openssl"; then

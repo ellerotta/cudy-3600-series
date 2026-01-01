@@ -1,0 +1,328 @@
+--- ori_xl2tpd-1.3.18/Makefile	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/Makefile	2022-11-08 17:06:24.791147901 +0800
+@@ -100,7 +100,15 @@
+ 
+ IPFLAGS?= -DIP_ALLOCATION
+ 
+-CFLAGS+= $(DFLAGS) -Os -Wall -Wextra -DSANITY $(OSFLAGS) $(IPFLAGS)
++INCLUDE_DIRS= -I../include \
++              -I$(KERNEL_LINKS_DIR) \
++              -I$(INC_BRCMDRIVER_PUB_PATH)/$(BRCM_BOARD) \
++              -I$(INC_BRCMSHARED_PUB_PATH)/$(BRCM_BOARD) \
++              -I$(BUILD_DIR)/userspace/public/include \
++              -I$(BUILD_DIR)/userspace/public/include/$(OALDIR) \
++              -I$(INC_INSTALL_KERNEL_HDR_PATH)/include
++
++CFLAGS+= $(DFLAGS) $(INCLUDE_DIRS) -Os -Wall -Wextra -DSANITY $(OSFLAGS) $(IPFLAGS) -DBRCM_L2TP_SUPPORT
+ HDRS=l2tp.h avp.h misc.h control.h call.h scheduler.h file.h aaa.h md5.h
+ OBJS=xl2tpd.o pty.o misc.o control.o avp.o call.o network.o avpsend.o scheduler.o file.o aaa.o md5.o
+ SRCS=${OBJS:.o=.c} ${HDRS}
+@@ -115,10 +123,10 @@
+ MANDIR?=$(DESTDIR)${PREFIX}/share/man
+ 
+ 
+-all: $(EXEC) pfc $(CONTROL_EXEC)
++all: $(EXEC) $(CONTROL_EXEC)
+ 
+ clean:
+-	rm -f $(OBJS) $(EXEC) pfc.o pfc $(CONTROL_EXEC)
++	rm -f $(OBJS) $(EXEC) $(CONTROL_EXEC)
+ 
+ $(EXEC): $(OBJS) $(HDRS)
+ 	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
+@@ -126,9 +134,6 @@
+ $(CONTROL_EXEC): $(CONTROL_SRCS)
+ 	$(CC) $(CFLAGS) $(LDFLAGS) $(CONTROL_SRCS) -o $@
+ 
+-pfc:
+-	$(CC) $(CFLAGS) -c contrib/pfc.c
+-	$(CC) $(LDFLAGS) -o pfc pfc.o -lpcap $(LDLIBS)
+ 
+ romfs:
+ 	$(ROMFSINST) /bin/$(EXEC)
+@@ -142,23 +147,15 @@
+ 	sed -i "s/Version: .*/Version: ${XL2TPDBASEVERSION}/" packaging/*/*.spec
+ 	sed -i "s/PKG_VERSION:=.*/PKG_VERSION:=${XL2TPDBASEVERSION}/" packaging/openwrt/Makefile
+ 
+-install: ${EXEC} pfc ${CONTROL_EXEC}
+-	install -d -m 0755 ${SBINDIR}
+-	install -m 0755 $(EXEC) ${SBINDIR}/$(EXEC)
+-	install -d -m 0755 ${MANDIR}/man5
+-	install -d -m 0755 ${MANDIR}/man8
+-	install -m 0644 doc/xl2tpd.8 ${MANDIR}/man8/
+-	install -m 0644 doc/xl2tpd-control.8 ${MANDIR}/man8/
+-	install -m 0644 doc/xl2tpd.conf.5 doc/l2tp-secrets.5 \
+-		 ${MANDIR}/man5/
++install: ${EXEC}  ${CONTROL_EXEC}
++	mkdir -p $(INSTALL_DIR)/bin
++	install -m 755 ${EXEC} $(INSTALL_DIR)/bin
++	$(STRIP) $(INSTALL_DIR)/bin/${EXEC}
+ 	# pfc
+-	install -d -m 0755 ${BINDIR}
+-	install -m 0755 pfc ${BINDIR}/pfc
+-	install -d -m 0755 ${MANDIR}/man1
+-	install -m 0644 contrib/pfc.1 ${MANDIR}/man1/
++
+ 	# control exec
+-	install -d -m 0755 ${SBINDIR}
+-	install -m 0755 $(CONTROL_EXEC) ${SBINDIR}/$(CONTROL_EXEC)
++	install -m 755 $(CONTROL_EXEC) $(INSTALL_DIR)/bin
++	$(STRIP) $(INSTALL_DIR)/bin/${CONTROL_EXEC}
+ 	
+ # openbsd
+ #	install -d -m 0755 /var/run/xl2tpd
+
+
+--- ori_xl2tpd-1.3.18/xl2tpd.c	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/xl2tpd.c	2022-11-08 17:10:42.479148342 +0800
+@@ -446,8 +446,12 @@
+            close(fd2);
+            return -EINVAL;
+        }
++#ifdef BRCM_L2TP_SUPPORT       
++       stropt[pos++] = strdup ("nodetach");
++       stropt[pos++] = strdup ("nodeflate");
++#endif         
+        stropt[pos++] = strdup ("plugin");
+-       stropt[pos++] = strdup ("pppol2tp.so");
++       stropt[pos++] = strdup (LIB_PPPOL2TP_PATH);
+        stropt[pos++] = strdup ("pppol2tp");
+        stropt[pos] = malloc (11);
+        snprintf (stropt[pos], 11, "%d", fd2);
+
+
+--- ori_xl2tpd-1.3.18/l2tp.h	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/l2tp.h	2022-11-08 17:12:50.263148561 +0800
+@@ -38,8 +38,11 @@
+ #include "aaa.h"
+ #include "common.h"
+ #include "ipsecmast.h"
+-
++#ifdef BRCM_L2TP_SUPPORT
++#define CONTROL_PIPE "/tmp/l2tp-control"
++#else
+ #define CONTROL_PIPE "/var/run/xl2tpd/l2tp-control"
++#endif
+ #define CONTROL_PIPE_MESSAGE_SIZE 1024
+ #define UNUSED(x) (void)(x)
+ 
+@@ -61,8 +64,12 @@
+ #define BINARY "xl2tpd"
+ #define SERVER_VERSION "xl2tpd-1.3.18"
+ #define VENDOR_NAME "xelerance.com"
+-#ifndef PPPD
+-#define PPPD		"/usr/sbin/pppd"
++#ifdef BRCM_L2TP_SUPPORT
++#define PPPD				"/bin/pppd"
++#define LIB_PPPOL2TP_PATH 	"/lib/pppol2tp.so"
++#else
++#define PPPD				"/usr/sbin/pppd"
++#define LIB_PPPOL2TP_PATH 	"pppol2tp.so"
+ #endif
+ #define CALL_PPP_OPTS "defaultroute"
+ #define FIRMWARE_REV	0x0690  /* Revision of our firmware (software, in this case) */
+       
+
+--- ori_xl2tpd-1.3.18/examples/xl2tpd.conf	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/examples/xl2tpd.conf	2022-11-08 17:14:01.131148683 +0800
+@@ -1,40 +1,5 @@
+-;
+-; This is a minimal sample xl2tpd configuration file for use
+-; with L2TP over IPsec.
+-;
+-; The idea is to provide an L2TP daemon to which remote Windows L2TP/IPsec
+-; clients connect. In this example, the internal (protected) network 
+-; is 192.168.1.0/24.  A special IP range within this network is reserved
+-; for the remote clients: 192.168.1.128/25
+-; (i.e. 192.168.1.128 ... 192.168.1.254)
+-;
+-; The listen-addr parameter can be used if you want to bind the L2TP daemon
+-; to a specific IP address instead of to all interfaces. For instance,
+-; you could bind it to the interface of the internal LAN (e.g. 192.168.1.98
+-; in the example below). Yet another IP address (local ip, e.g. 192.168.1.99)
+-; will be used by xl2tpd as its address on pppX interfaces.
+-
+-[global]
+-; listen-addr = 192.168.1.98
+-;
+-; requires openswan-2.5.18 or higher - Also does not yet work in combination
+-; with kernel mode l2tp as present in linux 2.6.23+
+-; ipsec saref = yes
+-; Use refinfo of 22 if using an SAref kernel patch based on openswan 2.6.35 or
+-;  when using any of the SAref kernel patches for kernels up to 2.6.35.
+-; saref refinfo = 30
+-;
+-; force userspace = yes
+-;
+-; debug tunnel = yes
+-
+-[lns default]
+-ip range = 192.168.1.128-192.168.1.254
+-local ip = 192.168.1.99
+-require chap = yes
+-refuse pap = yes
+-require authentication = yes
+-name = LinuxVPNserver
++[lac vpn1]
++lns = 192.168.3.5
++pppoptfile = /etc/ppp/peers/ppp-options.xl2tpd
+ ppp debug = yes
+-pppoptfile = /etc/ppp/options.xl2tpd
+-length bit = yes
++autodial = yes
+
+
+--- ori_xl2tpd-1.3.18/examples/ppp-options.xl2tpd	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/examples/ppp-options.xl2tpd	2022-11-08 17:15:36.955148847 +0800
+@@ -1,17 +1,3 @@
+-ipcp-accept-local
+-ipcp-accept-remote
+-ms-dns  192.168.1.1
+-ms-dns  192.168.1.3
+-ms-wins 192.168.1.2
+-ms-wins 192.168.1.4
+-noccp
+-auth
+-crtscts
+-idle 1800
+-mtu 1410
+-mru 1410
+-nodefaultroute
+-debug
+-lock
+-proxyarp
+-connect-delay 5000
++user admin
++password admin
++linkname ppp1
+
+
+--- ori_xl2tpd-1.3.18/network.c	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/network.c	2022-11-08 17:16:55.619148982 +0800
+@@ -251,8 +251,8 @@
+             else
+             {
+                 l2tp_log (LOG_NOTICE,
+-                     "Maximum retries exceeded for tunnel %d.  Closing.\n",
+-                     t->ourtid);
++                     "Maximum retries %d exceeded for tunnel %d.  Closing.\n",
++                     gconfig.max_retries, t->ourtid);
+                 strcpy (t->self->errormsg, "Timeout");
+                 t->self->needclose = -1;
+             }
+@@ -267,8 +267,11 @@
+          * exponentialy, unless it's capped by configuration.
+          */
+         unsigned shift_by = (buf->retries-1);
++        if (shift_by > gconfig.cap_backoff)
++            shift_by = gconfig.cap_backoff;
++            
+         if (shift_by > 31)
+-            shift_by = 31;
++            shift_by = 31;       
+ 
+         tv.tv_sec = 1LL << shift_by;
+         tv.tv_usec = 0;
+
+--- ori_xl2tpd-1.3.18/file.c	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/file.c	2022-11-08 17:19:04.367149202 +0800
+@@ -50,8 +50,12 @@
+     gconfig.packet_dump = 0;
+     gconfig.debug_tunnel = 0;
+     gconfig.debug_state = 0;
+-    gconfig.max_retries = DEFAULT_MAX_RETRIES;
+-    gconfig.cap_backoff = 0;
++    /* brcm change [global] context
++     * default max pkt resend times set to 10
++     * cap_backoff set to 4, it means timeout between retry 1 2 4 8 16 16 16 ...
++    */
++    gconfig.max_retries = 10;
++    gconfig.cap_backoff = 4;
+     lnslist = NULL;
+     laclist = NULL;
+     deflac = (struct lac *) calloc (1, sizeof (struct lac));
+
+--- ori_xl2tpd-1.3.18/control.c	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/control.c	2022-11-08 17:21:19.395149433 +0800
+@@ -436,20 +436,32 @@
+         y = tunnels.head;
+         while (y)
+         {
++#ifdef BRCM_L2TP_SUPPORT
++            if ((y->peer.sin_addr.s_addr == t->peer.sin_addr.s_addr) &&
++		        (y->peer.sin_port == t->peer.sin_port)	&&
++	            (y != t))
++#else
+             if ((y->tid == t->tid) &&
+                 (y->peer.sin_addr.s_addr == t->peer.sin_addr.s_addr) &&
+                 (!gconfig.ipsecsaref || y->refhim == t->refhim) &&
+                 (y != t))
+-            {
++#endif  
++            {    
+                 /* This can happen if we get a duplicate
+                    StartCCN or if they don't get our ACK packet */
+                 /*
+                  * But it is legitimate for two different remote systems
+                  * to use the same tid
+                  */
++#ifdef BRCM_L2TP_SUPPORT     
++               l2tp_log (LOG_DEBUG,
++	                 "%s: Peer with same ip:port %s:%d request tunnel twice, ignoring second one.\n",
++	                 __FUNCTION__, IPADDY (t->peer.sin_addr),ntohs (t->peer.sin_port));
++#else
+                 l2tp_log (LOG_DEBUG,
+                      "%s: Peer requested tunnel %d twice, ignoring second one.\n",
+                      __FUNCTION__, t->tid);
++#endif
+                 c->needclose = 0;
+                 c->closing = -1;
+                 return 0;
+@@ -941,8 +953,7 @@
+         }
+         start_pppd (c, po);
+         opt_destroy (po);
+-        if (c->lac)
+-            c->lac->rtries = 0;
++
+ 	if (c->lac->password[0])
+ 	    close(pppd_passwdfd[0]);
+         break;
+@@ -1640,7 +1651,7 @@
+                  __FUNCTION__);
+             return -EINVAL;
+         }
+-        else if ((ssize_t)err < 0)
++        else if ((size_t)err < 0)
+         {
+             if ((errno == EAGAIN) || (errno == EINTR))
+             {
+
+--- ori_xl2tpd-1.3.18/aaa.c	2022-11-02 04:43:30.000000000 +0800
++++ xl2tpd-1.3.18/aaa.c	2022-11-09 16:32:25.939184662 +0800
+@@ -301,7 +301,7 @@
+      * find a reasonable LNS for this call
+      * if one is available
+      */
+-    struct lns *lns;
++    struct lns *lns, *tmplns;
+     struct iprange *ipr;
+     int allow, checkdefault = 0;
+     /* If access control is disabled, we give the default
+@@ -315,6 +315,7 @@
+     }
+     while (lns)
+     {
++        tmplns = lns;
+         ipr = lns->lacs;
+         while (ipr)
+         {
+@@ -338,6 +339,8 @@
+         {
+             lns = deflns;
+             checkdefault = -1;
++            // LNS exist but its lns name is not "default", return an available LNS
++            return tmplns;
+         }
+     }
+     if (gconfig.accesscontrol)

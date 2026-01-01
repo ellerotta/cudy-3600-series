@@ -1,0 +1,2 @@
+kernel-aarch64: aarch64 arm
+dependson:  public/libs/zlib

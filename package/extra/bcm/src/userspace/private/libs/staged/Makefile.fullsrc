@@ -1,0 +1,106 @@
+#
+# In most cases, you only need to modify this first section.
+#
+
+LIB := libstaged.so
+OBJS = staged.o nvc.o
+
+all install: conditional_build
+
+.PHONY: all install
+
+
+ifeq ($(BCM_MODULAR_BUILD),)
+# Old way: infer location of make.common based on pwd.
+CURR_DIR := $(shell pwd)
+BUILD_DIR := $(subst /userspace, /userspace,$(CURR_DIR))
+BUILD_DIR := $(word 1, $(BUILD_DIR))
+INSTALL_DIR = $(CURR_DIR)/install_dir
+include $(BCM_TARGET_PATH)/make.common
+else
+# New Modular Build way: EXT_BUILD_DIR must be set.
+# Also point BUILD_DIR to EXT_BUILD_DIR
+BUILD_DIR := $(EXT_BUILD_DIR)
+include $(EXT_BUILD_DIR)/make.common
+endif
+
+
+ifeq ($(strip $(DESKTOP_LINUX)),y)
+BCM_BLT32_FLAGS := $(BCM_LD_FLAGS)
+endif
+
+LIBS = -ljson-c
+ifneq ($(strip $(BUILD_BRCM_CMS)),)
+LIBS += $(CMS_COMMON_LIBS) -lcms_msg
+else
+LIBS += -lbcm_util -lsys_util
+endif
+
+ifneq ($(strip $(BUILD_BRCM_UNFWLCFG)),)
+conditional_build: $(LIB) generic_private_lib_install
+else
+conditional_build:
+	@echo "skipping  $(LIB)  (not configured)"
+endif
+
+clean: generic_clean
+	rm -f $(INSTALL_DIR)/lib$(BCM_INSTALL_SUFFIX_DIR)/$(LIB)
+	rm -f $(BCM_FSBUILD_DIR)/private/lib/$(LIB)
+
+binaryonly_dist_clean:
+	if [ -a $(LIB) ]; then cp $(LIB) $(LIB)_$(PROFILE).save; fi;
+	rm -f $(INSTALL_DIR)/lib/private/$(LIB)
+	rm -f Makefile.fullsrc
+	rm -f *.o *.d *.d.* core.* *.a output.txt $(LIB)
+	rm -rf *.c *.h test
+
+#
+# Set our CommEngine directory (by splitting the pwd into two words
+# at /userspace and taking the first word only).
+# Then include the common defines under CommEngine.
+#
+#
+# Private apps and libs are allowed to include header files from the
+# private and public directories.
+#
+# WARNING: Do not modify this section unless you understand the
+# license implications of what you are doing.
+#
+ALLOWED_INCLUDE_PATHS := -I.\
+                         -I$(BCM_FSBUILD_DIR)/include \
+                         -I$(BCM_FSBUILD_DIR)/public/include \
+                         -I$(BCM_FSBUILD_DIR)/private/include \
+                         -I$(BUILD_DIR)/userspace/private/include  \
+                         -I$(BUILD_DIR)/userspace/private/include/$(OALDIR)
+
+# Private apps and libs are allowed to link with libraries from the
+# private and public directories.
+#
+# WARNING: Do not modify this section unless you understand the
+# license implications of what you are doing.
+#
+ALLOWED_LIB_DIRS := /lib:/public/lib:/private/lib
+
+vpath %.c $(CURR_DIR)
+
+%.o: %.c
+	$(CC) -c $(CFLAGS) $(BCM_BLT32_FLAGS) -o $@ $<
+
+$(LIB): $(OBJS)
+	$(CC) -Os -shared $(CFLAGS) $(BCM_BLT32_FLAGS) $(BCM_LIB_PATH) $(LIBS) -o $(LIB) $(OBJS)
+	mkdir -p $(INSTALL_DIR)/lib
+	$(INSTALL) -m 755 $(LIB) $(INSTALL_DIR)/lib/
+
+install: all
+	mkdir -p $(INSTALL_DIR)/lib
+	$(INSTALL) -m 755 $(LIB) $(INSTALL_DIR)/lib/
+
+test: test/test_nvc
+
+test/test_%: test/test_%.o
+	$(CC) $(CFLAGS) $(BCM_BLT32_FLAGS) -o $@ $< $(BCM_LIB_PATH) $(BCM_RPATH_LINK_OPTION) -lstaged
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

@@ -1,0 +1,195 @@
+--- a/pppd/Makefile.linux
++++ b/pppd/Makefile.linux
+@@ -38,7 +38,7 @@ LIBS =
+ # Uncomment the next 2 lines to include support for Microsoft's
+ # MS-CHAP authentication protocol.  Also, edit plugins/radius/Makefile.linux.
+ CHAPMS=y
+-USE_CRYPT=y
++#USE_CRYPT=y
+ # Don't use MSLANMAN unless you really know what you're doing.
+ #MSLANMAN=y
+ # Uncomment the next line to include support for MPPE.  CHAPMS (above) must
+@@ -141,7 +141,8 @@ endif
+ 
+ ifdef NEEDDES
+ ifndef USE_CRYPT
+-LIBS     += -ldes $(LIBS)
++CFLAGS   += -I$(shell $(CC) --print-sysroot)/usr/include/openssl
++LIBS     += -lcrypto
+ else
+ CFLAGS   += -DUSE_CRYPT=1
+ endif
+--- a/pppd/pppcrypt.c
++++ b/pppd/pppcrypt.c
+@@ -64,7 +64,7 @@ u_char *des_key;	/* OUT 64 bit DES key w
+ 	des_key[7] = Get7Bits(key, 49);
+ 
+ #ifndef USE_CRYPT
+-	des_set_odd_parity((des_cblock *)des_key);
++	DES_set_odd_parity((DES_cblock *)des_key);
+ #endif
+ }
+ 
+@@ -158,25 +158,25 @@ u_char *clear;	/* OUT 8 octets */
+ }
+ 
+ #else /* USE_CRYPT */
+-static des_key_schedule	key_schedule;
++static DES_key_schedule	key_schedule;
+ 
+ bool
+ DesSetkey(key)
+ u_char *key;
+ {
+-	des_cblock des_key;
++	DES_cblock des_key;
+ 	MakeKey(key, des_key);
+-	des_set_key(&des_key, key_schedule);
++	DES_set_key(&des_key, &key_schedule);
+ 	return (1);
+ }
+ 
+ bool
+-DesEncrypt(clear, key, cipher)
++DesEncrypt(clear, cipher)
+ u_char *clear;	/* IN  8 octets */
+ u_char *cipher;	/* OUT 8 octets */
+ {
+-	des_ecb_encrypt((des_cblock *)clear, (des_cblock *)cipher,
+-	    key_schedule, 1);
++	DES_ecb_encrypt((DES_cblock *)clear, (DES_cblock *)cipher,
++	    &key_schedule, 1);
+ 	return (1);
+ }
+ 
+@@ -185,8 +185,8 @@ DesDecrypt(cipher, clear)
+ u_char *cipher;	/* IN  8 octets */
+ u_char *clear;	/* OUT 8 octets */
+ {
+-	des_ecb_encrypt((des_cblock *)cipher, (des_cblock *)clear,
+-	    key_schedule, 0);
++	DES_ecb_encrypt((DES_cblock *)cipher, (DES_cblock *)clear,
++	    &key_schedule, 0);
+ 	return (1);
+ }
+ 
+--- a/pppd/pppcrypt.h
++++ b/pppd/pppcrypt.h
+@@ -38,7 +38,7 @@
+ #endif
+ 
+ #ifndef USE_CRYPT
+-#include <des.h>
++#include <openssl/des.h>
+ #endif
+ 
+ extern bool	DesSetkey __P((u_char *));
+
+--- a/pppd/options.c
++++ b/pppd/options.c
+@@ -1711,7 +1711,6 @@
+     } else if (strcmp(vers, VERSION) != 0) {
+ 	option_error("Plugin %s is for pppd version %s, this is %s",
+ 		     arg, vers, VERSION);
+-	goto errclose;
+     }
+     info("Plugin %s loaded.", arg);
+     (*init)();
+
+
+--- a/pppd/plugins/pppoatm/pppoatm.c
++++ b/pppd/plugins/pppoatm/pppoatm.c
+@@ -21,12 +21,20 @@
+ #include "fsm.h" /* Needed for lcp.h to include cleanly */
+ #include "lcp.h"
+ #include <atm.h>
++#include <linux/compiler.h>
+ #include <linux/atmdev.h>
++//#include <linux/bcm_atmdev.h>
+ #include <linux/atmppp.h>
+ #include <sys/stat.h>
+ #include <net/if.h>
+ #include <sys/ioctl.h>
+ 
++#define ATM_BACKEND_RT2684             3  /* Routed RFC1483/2684 */
++#define ATM_BACKEND_BR2684_BCM         4  /* Bridged RFC1483/2684 uses Broadcom ATMAPI*/
++#define ATM_BACKEND_PPP_BCM            5  /* PPPoA uses Broadcom bcmxtmrt driver */
++#define ATM_BACKEND_PPP_BCM_DISCONN    6  /* PPPoA LCP disconnect */
++#define ATM_BACKEND_PPP_BCM_CLOSE_DEV  7  /* PPPoA close device */
++
+ const char pppd_version[] = VERSION;
+ 
+ static struct sockaddr_atmpvc pvcaddr;
+@@ -69,21 +77,28 @@
+ static int setdevname_pppoatm(const char *cp, const char **argv, int doit)
+ {
+ 	struct sockaddr_atmpvc addr;
++	char *pvc;
+ 	extern struct stat devstat;
+ 	if (device_got_set)
+ 		return 0;
+ 	//info("PPPoATM setdevname_pppoatm: '%s'", cp);
+ 	memset(&addr, 0, sizeof addr);
+-	if (text2atm(cp, (struct sockaddr *) &addr, sizeof(addr),
+-	    T2A_PVC | T2A_NAME | T2A_WILDCARD) < 0) {
+-               if(doit)
+-                   info("atm does not recognize: %s", cp);
++	
++    if ((pvc = strchr(cp, '.')) == NULL)
++        return 0;
++	
++    if (text2atm(pvc+1, (struct sockaddr *) &addr, sizeof(addr), T2A_PVC | T2A_NAME) < 0) 
++    {
++        if(doit)
++            info("atm does not recognize: %s", cp);
+ 		return 0;
+-           }
+-	if (!doit) return 1;
+-	//if (!dev_set_ok()) return -1;
+-	memcpy(&pvcaddr, &addr, sizeof pvcaddr);
+-	strlcpy(devnam, cp, sizeof devnam);
++    }
++    if (!doit) return 1;
++    //if (!dev_set_ok()) return -1;
++
++	strncpy(devnam, cp, (pvc-cp));
++    devnam[pvc-cp] = '\0';
++    memcpy(&pvcaddr, &addr, sizeof pvcaddr);
+ 	devstat.st_mode = S_IFSOCK;
+ 	if (the_channel != &pppoa_channel) {
+ 		the_channel = &pppoa_channel;
+@@ -108,7 +123,7 @@
+ static void set_line_discipline_pppoatm(int fd)
+ {
+ 	struct atm_backend_ppp be;
+-	be.backend_num = ATM_BACKEND_PPP;
++	be.backend_num = ATM_BACKEND_PPP_BCM;
+ 	if (!llc_encaps)
+ 		be.encaps = PPPOATM_ENCAPS_VC;
+ 	else if (!vc_encaps)
+@@ -116,7 +131,7 @@
+ 	else
+ 		be.encaps = PPPOATM_ENCAPS_AUTODETECT;
+ 	if (ioctl(fd, ATM_SETBACKEND, &be) < 0)
+-		fatal("ioctl(ATM_SETBACKEND): %m");
++		fatal("ioctl(ATM_SETBACKEND): %m");	
+ }
+ 
+ #if 0
+@@ -163,7 +178,15 @@
+ 
+ static void disconnect_pppoatm(void)
+ {
+-	close(pppoa_fd);
++	//close(pppoa_fd);
++    if (pppoa_fd > 0) {
++        struct atm_backend_ppp be;
++        be.backend_num = ATM_BACKEND_PPP_BCM_CLOSE_DEV;
++        if (ioctl(pppoa_fd, ATM_SETBACKEND, &be) < 0)
++           fatal("ioctl(ATM_SETBACKEND): %m");
++        close(pppoa_fd);
++        pppoa_fd= -1;
++    }	
+ }
+ 
+ void plugin_init(void)

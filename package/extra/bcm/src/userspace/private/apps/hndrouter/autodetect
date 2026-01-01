@@ -1,0 +1,4 @@
+
+dependson: private/libs/wlcsm private/apps/nvram public/libs/curl public/libs/libnl public/libs/openssl public/libs/libevent public/libs/jansson public/libs/cjose public/libs/libcbor public/libs/libevhtp
+condition: ifneq ($(strip $(BUILD_BRCM_CPEROUTER)),)
+

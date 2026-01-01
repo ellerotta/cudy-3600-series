@@ -1,0 +1,352 @@
+diff --git a/src/lib/hdlc/brcm_hdlc.cpp b/src/lib/hdlc/brcm_hdlc.cpp
+index 4d1d443..26457f0 100644
+--- a/src/lib/hdlc/brcm_hdlc.cpp
++++ b/src/lib/hdlc/brcm_hdlc.cpp
+@@ -21,8 +21,16 @@
+ #include "common/code_utils.hpp"
+ #include "common/logging.hpp"
+ 
+-#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_LOG
++extern "C"
++{
++    extern FILE *      BrcmDbfwLogDumpFile;
++    extern char *      BrcmHciLogDumpFilename;
++}
++#endif
++
+ 
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
+ extern "C"
+ {
+     uint8_t g_BrcmCoreDumpInProgress = 0;           // Non-zero if a firmware coredump is in progress
+@@ -30,14 +38,15 @@ extern "C"
+ 
+ namespace ot {
+ namespace Hdlc {
+-
+ #define kFlagHciEvent                       0x04    // UART HCI message type
+ #define HCI_EVENT_OPCODE_VENDOR             0xFF    // vendor specific event
+ #define HCI_BRCM_VSE_SUBCODE_DBFW_DUMP      0x1B    // dbfw dump vse
++#define HCI_BRCM_VSE_SUBCODE_HOST_EVT       0x61    // event for AP host
+ 
+-#define HCI_BRCM_DBFW_DUMPTYPE_COREDUMP     0x03
+-#define HCI_BRCM_DBFW_COREDUMPTYPE_END      0xFF
++#define HCI_BRCM_DBFW_DUMPTYPE_COREDUMP     0x03    // core dump
++#define HCI_BRCM_DBFW_DUMPTYPE_TRACEDUMP2   0x04    // dbfw trace log dump
+ 
++#define HCI_BRCM_DBFW_COREDUMPTYPE_END      0xFF
+ 
+ // DBFW parameter message offsets
+ #define BRCM_DBFW_OFFSET_DUMP_TYPE          0x05
+@@ -134,9 +143,13 @@ bool Decoder::BrcmDecodeVseByte(uint8_t byte)
+             {
+                 mBrcmSubState = kBrcmSubStateDbfwParams;
+             }
++            else if (byte == HCI_BRCM_VSE_SUBCODE_HOST_EVT)
++            {
++                mBrcmSubState = kBrcmSubStateDbfwParams;
++            }
+             else
+             {
+-                // Not DBFW VSE: ignore remainder of HCI event
++                // Not DBFW VSE or event for Host : ignore remainder of HCI event
+                 mBrcmSubState = kBrcmSubStateHciEvtIgnore;
+             }
+             break;
+@@ -158,7 +171,7 @@ bool Decoder::BrcmDecodeVseByte(uint8_t byte)
+             {
+                 bool new_filename_available = false;
+ 
+-                // Currently only save coredumps
++                // save coredumps
+                 if (mBrcmDbfwDumpType == HCI_BRCM_DBFW_DUMPTYPE_COREDUMP)
+                 {
+                     // If first coredump VSE, then open new
+@@ -217,6 +230,26 @@ bool Decoder::BrcmDecodeVseByte(uint8_t byte)
+                     mBrcmHciEvtCount++;
+                 }
+ 
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_LOG
++                /* save all other DBFW event data */
++                else // if (mBrcmDbfwDumpType == HCI_BRCM_DBFW_DUMPTYPE_TRACEDUMP2)
++                {
++                    // Handle end of DBFW log
++                    if (!mBrcmHciEvtLen)
++                    {
++                        // Write the dbfw event to file
++                        if (BrcmDbfwLogDumpFile)
++                        {
++                            fwrite(mBrcmHciEvtBuf, sizeof(char), mBrcmHciEvtBufCurLen, BrcmDbfwLogDumpFile);
++                        }
++                        else
++                        {
++                            otLogCritPlat("mBrcmDbfwLogDumpFile null");
++                        }
++                        mState = kStateSync;
++                    }
++                }
++#endif
+                 mState = kStateSync;
+             }
+             break;
+@@ -231,6 +264,8 @@ bool Decoder::BrcmDecodeVseByte(uint8_t byte)
+                 mState = kStateSync;
+             }
+             break;
++        default:
++            break;
+         }
+         break;
+ 
+diff --git a/src/lib/hdlc/hdlc.cpp b/src/lib/hdlc/hdlc.cpp
+index 0ee9926..a9ea5ef 100644
+--- a/src/lib/hdlc/hdlc.cpp
++++ b/src/lib/hdlc/hdlc.cpp
+@@ -243,7 +243,7 @@ void Decoder::Decode(const uint8_t *aData, uint16_t aLength)
+             /* Processed by BRCM */
+             continue;
+         }
+-#endif // BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
++#endif
+ 
+         switch (mState)
+         {
+diff --git a/src/posix/Makefile.am b/src/posix/Makefile.am
+index c0a0766..8fc9f05 100644
+--- a/src/posix/Makefile.am
++++ b/src/posix/Makefile.am
+@@ -115,6 +115,7 @@ ot_daemon_LDADD                                                        = \
+     $(top_builddir)/src/lib/spinel/libopenthread-spinel-rcp.a            \
+     $(top_builddir)/src/lib/hdlc/libopenthread-hdlc.a                    \
+     $(LDADD_COMMON)                                                      \
++    -lstdc++                                                             \
+     $(NULL)
+ 
+ ot_daemon_LDFLAGS                                                      = \
+diff --git a/src/posix/platform/hdlc_interface.cpp b/src/posix/platform/hdlc_interface.cpp
+index 35e1920..e327636 100644
+--- a/src/posix/platform/hdlc_interface.cpp
++++ b/src/posix/platform/hdlc_interface.cpp
+@@ -253,7 +253,7 @@ void HdlcInterface::Read(void)
+     }
+ 
+ #ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
+-    // If coredump is in progress, read the reset of the coredump VSEs
++    // If coredump is in progress, read the rest of the coredump VSEs
+     while (g_BrcmCoreDumpInProgress)
+     {
+         struct timeval timeout;
+@@ -269,8 +269,8 @@ void HdlcInterface::Read(void)
+ 
+         rval = select(mSockFd + 1, &read_fds, nullptr, &error_fds, &timeout);
+ 
+-        //printf("HdlcInterface::Read rval(%zd)\n", rval);
+-        //printf("HdlcInterface::Read rval(%zd), timeout.tv_sec:%ld\n", rval, timeout.tv_sec);
++        //printf("HdlcInterface::Read rval(%ld)\n", rval);
++        //printf("HdlcInterface::Read rval(%ld), timeout.tv_sec:%ld\n", rval, timeout.tv_sec);
+ 
+         if (rval > 0)
+         {
+@@ -308,7 +308,7 @@ void HdlcInterface::Read(void)
+             EINVAL A component of timeout is outside the acceptable range. */
+ 
+             printf("HdlcInterface::Read ENOENT:%d, EBADF:%d, EINTR:%d, EISDIR:%d, EINVAL:%d\n", ENOENT, EBADF, EINTR, EISDIR, EINVAL);
+-            printf("HdlcInterface::Read rval(%zd), timeout.tv_sec:%ld, errno:%d\n", rval, timeout.tv_sec , errno);
++            printf("HdlcInterface::Read rval(%ld), timeout.tv_sec:%ld, errno:%d\n", rval, timeout.tv_sec , errno);
+             if(timeout.tv_sec)
+             {
+                 printf("timer is not expired, continue to read\n");
+diff --git a/src/posix/platform/openthread-core-posix-config.h b/src/posix/platform/openthread-core-posix-config.h
+index eddc375..4ec5148 100644
+--- a/src/posix/platform/openthread-core-posix-config.h
++++ b/src/posix/platform/openthread-core-posix-config.h
+@@ -263,6 +263,17 @@
+  */
+ #define BRCM_OPENTHREAD_HDLC_LOG_ENABLE 1
+ 
++/**
++ * @def BRCM_OPENTHREAD_REDIRECT_DBFW_LOG
++ *
++ * Define to 1 to enable parsing of BT HCI DBFW log in HDLC and redirecting
++ *   DBFW log to a file
++ *
++ * note: BRCM_OPENTHREAD_REDIRECT_DBFW_VSE must be 1 to enable this feature
++ *
++ */
++#define BRCM_OPENTHREAD_REDIRECT_DBFW_LOG 1
++
+ /**
+  * @def BRCM_OPENTHREAD_REDIRECT_DBFW_VSE
+  *
+diff --git a/src/posix/platform/settings.cpp b/src/posix/platform/settings.cpp
+index e51400b..63ef323 100644
+--- a/src/posix/platform/settings.cpp
++++ b/src/posix/platform/settings.cpp
+@@ -94,13 +94,16 @@ static void getSettingsFileName(otInstance *aInstance, char aFileName[kMaxFileNa
+     otPlatRadioGetIeeeEui64(aInstance, reinterpret_cast<uint8_t *>(&nodeId));
+     nodeId = ot::Encoding::BigEndian::HostSwap64(nodeId);
+ #if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE)
++    extern char        nodeName[256];
++    char l_nodeName[10] = {0};
++    memcpy(l_nodeName,nodeName,strlen(nodeName));
+     /* BRCM_OPENTHREAD: Set ot-cli nodeID based on USB port number (BCM20708 does not return a unique IeeeEui64) */
+     if (gNodeId != 0xFFFFFFFF)
+     {
+         nodeId = gNodeId;
+     }
+-    snprintf(aFileName, kMaxFileNameSize, OPENTHREAD_CONFIG_POSIX_SETTINGS_PATH "/%s_USB%" PRIx64 ".%s",
+-             offset == nullptr ? "0" : offset, nodeId, (aSwap ? "swap" : "data"));
++    snprintf(aFileName, kMaxFileNameSize, OPENTHREAD_CONFIG_POSIX_SETTINGS_PATH "/%s_%s_nodeId%" PRIx64 ".%s",
++             offset == nullptr ? "0" : offset, l_nodeName,nodeId, (aSwap ? "swap" : "data"));
+ #else
+     snprintf(aFileName, kMaxFileNameSize, OPENTHREAD_CONFIG_POSIX_SETTINGS_PATH "/%s_%" PRIx64 ".%s",
+              offset == nullptr ? "0" : offset, nodeId, (aSwap ? "swap" : "data"));
+diff --git a/src/posix/platform/system.cpp b/src/posix/platform/system.cpp
+index 63314f3..cc66307 100644
+--- a/src/posix/platform/system.cpp
++++ b/src/posix/platform/system.cpp
+@@ -56,6 +56,11 @@
+ #include "posix/platform/radio_url.hpp"
+ #include "posix/platform/udp.hpp"
+ 
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_LOG
++#include <sys/stat.h>
++#include <time.h>
++#endif
++
+ otInstance *gInstance = nullptr;
+ bool        gDryRun   = false;
+ 
+@@ -121,6 +126,82 @@ static const char *getTrelRadioUrl(otPlatformConfig *aPlatformConfig)
+ }
+ #endif
+ 
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_LOG
++#define     BRCM_LOGDUMPFILE_FOLDER "logDump"
++#define     BRCM_LOGDUMPFILE_MAXPATH   256     // Maximum size for log dump file pathname
++#define     BRCM_LOGDUMPFILE_MAXCOUNT  100000  // Maximum number of log dump files (00000-99999)
++FILE *      BrcmDbfwLogDumpFile = nullptr;
++char        BrcmHciLogDumpFilename[BRCM_LOGDUMPFILE_MAXPATH] = {0x00};
++const char  BRCM_LOGDUMPFILE_PREFIX[] = "log_dump";
++char        nodeName[BRCM_LOGDUMPFILE_MAXPATH] = {0x00};
++
++bool BrcmDbfwLogFileClose(void)
++{
++    if(BrcmDbfwLogDumpFile)
++    {
++        fclose(BrcmDbfwLogDumpFile);
++        BrcmDbfwLogDumpFile = nullptr;
++        printf("BrcmDbfwFileClose closed\n");
++    }
++    else
++    {
++        printf("BrcmDbfwFileClose is NULL !!!!!!!!!!!! \n");
++    }
++    return true;
++}
++
++bool BrcmDbfwLogFileOpen(char *p_nodeName)
++{
++    uint32_t i;
++    struct stat st_folder;
++    struct stat aStat;
++    bool new_filename_available = false;
++    char RadioUrl[10] = {'0',};
++    memcpy(RadioUrl,p_nodeName,strlen(p_nodeName));
++    printf("BrcmDbfwLogFileOpen RadioUrl:%s, len:%d\n", RadioUrl, (int) strlen(p_nodeName));
++    // First VSE - open new logfile using next unused filename in sequence
++
++    char filename[40];
++    struct tm *timenow;
++
++    time_t now = time(NULL);
++    timenow = gmtime(&now);
++    strftime(filename, sizeof(filename), "%m%d_%H%M%S", timenow);
++
++    if (stat(BRCM_LOGDUMPFILE_FOLDER, &st_folder) == -1)
++    {
++        VerifyOrDie(mkdir(BRCM_LOGDUMPFILE_FOLDER, 0755) == 0, OT_EXIT_ERROR_ERRNO);
++    }
++    for (i=0; i < BRCM_LOGDUMPFILE_MAXCOUNT; i++)
++    {
++        snprintf(BrcmHciLogDumpFilename, BRCM_LOGDUMPFILE_MAXPATH, "%s/%s_%s_%s_%05d.bin", BRCM_LOGDUMPFILE_FOLDER,RadioUrl,BRCM_LOGDUMPFILE_PREFIX, filename,i);
++        if (stat(BrcmHciLogDumpFilename, &aStat) == -1)
++        {
++            if (errno == ENOENT)    // if  "file not found"
++            {
++                new_filename_available = true;
++            }
++            break;
++        }
++    }
++
++    // Found new unused filename?
++    if (new_filename_available)
++    {
++        if ((BrcmDbfwLogDumpFile = fopen(BrcmHciLogDumpFilename, "wb")) == nullptr)
++        {
++            // If unable open (or no available filename)
++            otLogCritPlat("Unable to open file for DBFW log file:%s",BrcmHciLogDumpFilename);
++        }
++        else
++        {
++            printf("DBFW log is on progress (%s)\n", BrcmHciLogDumpFilename);
++        }
++    }
++    return true;
++}
++#endif
++
+ void platformInit(otPlatformConfig *aPlatformConfig)
+ {
+ #if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE)
+@@ -132,12 +213,35 @@ void platformInit(otPlatformConfig *aPlatformConfig)
+     {
+         /* pRadioUrl points to 'USB' in radio url */
+         gNodeId = pRadioUrl[3] - '0';       // Set gNodeId to USB port number
++        memcpy(nodeName,pRadioUrl,4);
++        nodeName[4] = 0;
+     }
++    else if ((pRadioUrl = strstr((char *)aPlatformConfig->mRadioUrls[0], "BTMUX")) != NULL)
++    {
++        /* pRadioUrl points to 'BTMUX' in radio url */
++        gNodeId = pRadioUrl[5] - '0';       // Set gNodeId to USB port number
++        memcpy(nodeName,pRadioUrl,6);
++        nodeName[6] = 0;
++    }
++    printf("platformInit nodeName %s === \n",nodeName);
+     otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_CORE, "mRadioUrls: %s", pRadioUrl);
++    otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_CORE, "aPlatformConfig->mRadioUrls: %s", (char *)aPlatformConfig->mRadioUrls[0]);
++
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_LOG
++    if(nodeName)
++    {
++        BrcmDbfwLogFileOpen(nodeName);
++    }
++    else
++    {
++        otPlatLog(OT_LOG_LEVEL_CRIT, OT_LOG_REGION_CORE, "mRadioUrls is empty");
++    }
++#endif
+ }
+ #endif
+ 
+ 
++
+ #if OPENTHREAD_POSIX_CONFIG_BACKTRACE_ENABLE
+     platformBacktraceInit();
+ #endif
+@@ -265,6 +369,12 @@ exit:
+ 
+ void platformDeinit(void)
+ {
++
++#ifdef BRCM_OPENTHREAD_REDIRECT_DBFW_LOG
++    BrcmDbfwLogFileClose();
++#endif
++
++
+ #if OPENTHREAD_POSIX_VIRTUAL_TIME
+     virtualTimeDeinit();
+ #endif

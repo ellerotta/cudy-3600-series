@@ -1,0 +1,258 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Role Permission Configuration</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function isValidPermission(permission) {
+        var ret = false;
+        var num = permission.length;
+
+        if (num != 4)
+          return ret;
+
+        for (i = 0; i < 4; i++)
+        {
+          var c = permission.charAt(i);
+          switch (i) {
+            case 0:
+              if (c != 'r' && c != '-')
+                return ret;
+              break;
+            case 1:
+              if (c != 'w' && c != '-')
+                return ret;
+              break;
+            case 2:
+              if (c != 'x' && c != '-')
+                return ret;
+              break;
+            case 3:
+              if (c != 'n' && c != '-')
+                return ret;
+              break;
+            default:
+              return ret;
+          }
+        }
+
+        return true;
+      }
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'ctrolepercfg.cgi?';
+        var num = 0;
+        var permission = '';
+
+        // validate Role Alias
+        if (document.getElementById('roleName').value == '') {
+          alert('Role alias cannot be empty.');
+          return;
+        }
+        // validate Order
+        if (isNaN(document.getElementById('order').value)) {
+          alert('Order is not a number.');
+          return;
+        }
+        // validate Param
+        permission = document.getElementById('param').value;
+        if (isValidPermission(permission) == false) {
+          alert('Param has invalid permissions: ' + permission + '.');
+          return;
+        }
+        // validate Obj
+        permission = document.getElementById('obj').value;
+        if (isValidPermission(permission) == false) {
+          alert('Obj has invalid permissions: ' + permission + '.');
+          return;
+        }
+        // validate Instantiated Obj
+        permission = document.getElementById('instObj').value;
+        if (isValidPermission(permission) == false) {
+          alert('Instantiated Obj has invalid permissions: ' + permission + '.');
+          return;
+        }
+        // validate Command Event
+        permission = document.getElementById('command').value;
+        if (isValidPermission(permission) == false) {
+          alert('Command Event has invalid permissions: ' + permission + '.');
+          return;
+        }
+
+        // Role Name and Permission Alias
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            val += info[0] + '|' + info[1] + '|';
+          } else
+            val += '||';
+        } else {
+          // Role Name
+          val +=  document.getElementById('roleName').value + '|';
+          // Permission Alias
+          val +=  '|';
+        }
+
+        // Enable Permission
+        if (document.getElementById('enable-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+
+        // Order
+        val += document.getElementById('order').value + '|';
+        // Targets
+        val += document.getElementById('targets').value + '|';
+        // Param
+        val += document.getElementById('param').value + '|';
+        // Obj
+        val += document.getElementById('obj').value + '|';
+        // Instantiated Obj
+        val += document.getElementById('instObj').value + '|';
+        // Command Event
+        val += document.getElementById('command').value;
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function bodyLoad() {
+        var role = document.getElementById('roleName');
+        var permission = document.getElementById('permissionAlias');
+
+        if (uspAction == 'edit') {
+          // Role Name
+          role.disabled = true;
+          // Permission Alias
+          permission.disabled = true;
+
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            
+            // Role Name
+            role.value = info[0];
+            // Permission Alias
+            permission.value = info[1];
+            // Enable Permission
+            if (info[2] == 'Yes')
+              document.getElementById('enable-1').checked = true;
+            else
+              document.getElementById('enable-0').checked = true;
+            // Order
+            document.getElementById('order').value = info[3];
+            // Targets
+            document.getElementById('targets').value = info[4];
+            // Param
+            document.getElementById('param').value = info[5];
+            // Obj
+            document.getElementById('obj').value = info[6];
+            // Instantiated Obj
+            document.getElementById('instObj').value = info[7];
+            // Command Event
+            document.getElementById('command').value = info[8];
+          }
+
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          var proto = document.getElementById('protocol');
+
+          // Role Name
+          role.disabled = false;
+          // Permission Alias
+          permission.disabled = true;
+          // Disable Permission
+          document.getElementById('enable-0').checked = true;
+          // Order
+          document.getElementById('order').value = 0;
+          // Param
+          document.getElementById('param').value = '----';
+          // Obj
+          document.getElementById('obj').value = '----';
+          // Instantiated Obj
+          document.getElementById('instObj').value = '----';
+          // Command Event
+          document.getElementById('command').value = '----';
+
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>Role Permission Configuration</h3>
+    The order is used when determining the permissions for overlapping Targets that are contained within the same Role.<br>
+    The larger value of this parameter takes priority over a permission with a smaller value (i.e., 0 has the lowest priority).<br><br>
+    The permissions of Param, Obj, Instantiated Obj, and Command Event is a string of 4 characters where each<br>
+    character represents a permission ("r" for Read, "w" for Write, "x" for Execute", and "n" for Notify).<br>
+    The string is always in the same order (rwxn) and the lack of a permission is signified by a "-" character (e.g., r--n).<br><br><br>
+    <div id='permission'><center>
+      <table id='tblPermissionCfg' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd'>Role Name</td>
+            <td colspan='2'>
+				<select id='roleName'>
+                  <option value=''></option>
+<%ejGetOther(uspGetRoleNameList)%>
+                </select>
+            </td>
+          </tr>
+          <tr>
+            <td class='hd'>Permission Alias</td>
+            <td colspan='2'><input type='text' id='permissionAlias'></td>
+          </tr>
+          <tr height='25'>
+          </tr>
+          <tr>
+            <td class='hd'>Enable Permission</td>
+            <td><input name='enable' id='enable-0' type='radio'>  Disable</td>
+            <td><input name='enable' id='enable-1' type='radio'>  Enable</td>
+          </tr>
+          <tr>
+            <td class='hd'>Order</td>
+            <td colspan='2'><input type='text' id='order'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Targets</td>
+            <td colspan='2'><input type='text' id='targets'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Param</td>
+            <td colspan='2'><input type='text' id='param'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Obj</td>
+            <td colspan='2'><input type='text' id='obj'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Instantiated Obj</td>
+            <td colspan='2'><input type='text' id='instObj'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Command Event</td>
+            <td colspan='2'><input type='text' id='command'></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+  </form>
+  </body>
+</html>

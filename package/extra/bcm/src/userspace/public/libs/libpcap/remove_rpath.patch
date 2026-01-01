@@ -1,0 +1,11 @@
+--- libpcap-1.10.2/configure	2022-12-31 21:40:10.000000000 +0800
++++ libpcap/configure	2023-01-03 15:40:46.749091105 +0800
+@@ -13785,7 +13785,7 @@
+ 		# "native" linker is the GNU linker or accepts
+ 		# compatible command-line arguments.
+ 		#
+-		RPATH="-Wl,-rpath,\${libdir}"
++		# RPATH="-Wl,-rpath,\${libdir}"
+ 		;;
+ 
+ 	solaris*)

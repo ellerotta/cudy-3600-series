@@ -1,0 +1,41 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>MQTT Capabilities</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      function bodyLoad() {
+        var capabilities = '<%ejGetOther(uspGetMqttCapabilities)%>';
+        var info = capabilities.split('|');
+
+        document.getElementById('protocolVersion').value = info[0];
+        document.getElementById('transportProtocol').value = info[1];
+        document.getElementById('clntSubsNumMax').value = info[2];
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>MQTT Capabilities</h3><br>
+    <div id='mqttCpblt'><center>
+      <table id='mqttCpbltTbl' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd' width='250'>Supported Protocol Versions</td>
+            <td><input type='text' id='protocolVersion' disabled></td>
+          </tr>
+          <tr>
+            <td class='hd' width='250'>Supported Transport Protocols</td>
+            <td><input type='text' id='transportProtocol' disabled></td>
+          </tr>
+          <tr>
+            <td class='hd'>Max Number Of Client Subscriptions</td>
+            <td><input type='text' id='clntSubsNumMax' disabled></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </form>
+  </body>
+</html>

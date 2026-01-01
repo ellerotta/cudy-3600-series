@@ -1,0 +1,1 @@
+dependson: private/libs/cms_qdm private/libs/bcm_zbus_intf private/libs/bcm_generic_hal

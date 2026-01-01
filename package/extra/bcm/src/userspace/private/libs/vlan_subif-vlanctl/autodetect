@@ -1,0 +1,2 @@
+condition: ifneq ($(strip $(BUILD_VLANSUBIF_VLANCTL)),)
+dependson: private/libs/vlanctl

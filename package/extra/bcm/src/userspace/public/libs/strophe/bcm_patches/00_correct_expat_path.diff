@@ -1,0 +1,11 @@
+--- libstrophe-0.12.0/src/parser_expat.c	2022-05-09 03:09:53.000000000 +0800
++++ libstrophe/src/parser_expat.c	2022-10-27 14:10:59.207704820 +0800
+@@ -17,7 +17,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ 
+-#include <expat.h>
++#include <expat/expat.h>
+ 
+ #include "strophe.h"
+ #include "common.h"

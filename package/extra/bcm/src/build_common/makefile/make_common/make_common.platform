@@ -1,0 +1,436 @@
+######################################################################
+# + SDK/make.common
+#
+
+ifeq ($(strip $(PROFILE_ARCH)),mips)
+ARCHCAP := MIPS
+BCM_ARCH := mips
+ARCH_ENDIAN := big
+export BRCM_ENDIAN_FLAGS := -b
+else
+ARCH_ENDIAN := little
+export BRCM_ENDIAN_FLAGS := -l
+ifeq ($(strip $(PROFILE_ARCH)),arm)
+ARCHCAP := ARM
+BCM_ARCH := arm
+endif
+ifeq ($(strip $(PROFILE_ARCH)),mipsel)
+ARCHCAP := MIPSEL
+BCM_ARCH := mips
+endif
+ifeq ($(strip $(PROFILE_ARCH)),aarch64)
+ARCHCAP := AARCH64
+BCM_ARCH := arm64
+endif
+ifeq ($(strip $(PROFILE_ARCH)),i386)
+ARCHCAP := I386
+BCM_ARCH := i386
+endif
+ifeq ($(strip $(DESKTOP_LINUX)),y)
+ifeq ($(shell uname -m),x86_64)
+ARCHCAP := X86_64
+# uncomment the next line to have 64-bit compiling environment if the build machine is a 64-bit system
+# ARCH := x86
+endif
+ifeq ($(shell uname -m),i686)
+ARCHCAP := I686
+BCM_ARCH := i686
+endif
+endif
+endif
+
+# BCM_MAX_GEM_PORTS & EPON_ONU_TYPE may be in profile
+
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_6838_6848_6858_6846_6856_6878_),)
+ifeq ($(BUILD_GPON),y)
+export BCM_PON=y
+endif
+ifeq ($(BUILD_EPON_SDK),y)
+export BCM_PON=y
+endif
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_6858_6846_6856_6878_),)
+export BCM_PON_XRDP=y
+endif
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_6838_6848_),)
+export BCM_PON_RDP=y
+endif
+endif
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_63138_63148_4908_63158_),)
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_63138_63148_4908_),)
+BCM_DSL_RDP=y
+endif
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_63158_),)
+export BCM_DSL_XRDP=y
+endif
+endif
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_6858_63158_6846_6856_6878_),)
+export BCM_XRDP=y
+endif
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_6838_6848_63138_63148_4908_),)
+export BCM_RDP=y
+endif
+
+ifneq ($(strip $(BRCM_EPON_STACK)),)
+export WAN_AUTODETECT=y
+export BCM_PON=y
+endif
+
+# >>>>>>>>>>>>>>> 1.1 BUILD_DSL_FLAGS definition + 1.2 DSL_GFAST_DEFINES  <<<<<<<<<<<<<<<
+
+ifneq ($(strip $(BUILD_DSL)),)
+export BUILD_DSL
+
+# Compile flags module or application that use ADSL MIBS
+BUILD_DSL_FLAGS := -DNONE
+
+BUILD_DSL_FLAGS += -DLINUX_FW_EXTRAVERSION=$(BRCM_VERSION)$(BRCM_RELEASE)$(shell echo $(BRCM_EXTRAVERSION) | head -c 2)
+
+
+ifneq ($(strip $(BUILD_DSL_SELT_TEST)),)
+BUILD_DSL_FLAGS += -DSUPPORT_SELT
+#CMS_DMP_FLAGS += -DDMP_X_BROADCOM_COM_SELT_1
+export BUILD_DSL_SELT_TEST=y
+endif
+
+ifeq ($(strip $(BRCM_PHY_BONDING)),y)
+BUILD_DSL_FLAGS += -DSUPPORT_DSL_BONDING
+export BRCM_PHY_BONDING=y
+endif
+
+ifeq ($(strip $(BRCM_MULTI_PHY)),y)
+BUILD_DSL_FLAGS += -DSUPPORT_MULTI_PHY
+export BRCM_MULTI_PHY=y
+endif
+
+ifeq ($(strip $(BRCM_PHY_BONDING5B)),y)
+BUILD_DSL_FLAGS += -DSUPPORT_DSL_BONDING5B
+export BRCM_PHY_BONDING5B=y
+endif
+
+# G.FAST flags
+DSL_GFAST_DEFINES := -DNONE
+
+ifeq ($(strip $(BRCM_PHY_GFAST)),y)
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_63138_63158_),)
+DSL_GFAST_DEFINES += -DSUPPORT_DSL_GFAST
+export BRCM_PHY_GFAST=y
+ifeq ($(strip $(BRCM_PHY_GFASTCOMBO)),y)
+DSL_GFAST_DEFINES += -DSUPPORT_DSL_GFASTCOMBO
+export BRCM_PHY_GFASTCOMBO=y
+endif
+endif
+endif
+
+
+ifeq ($(strip $(BRCM_PHY_CO)),y)
+ifneq ($(findstring _$(strip $(BRCM_CHIP))_,_63158_),)
+DSL_GFAST_DEFINES += -DBRCM_PHY_CO
+export BRCM_PHY_CO=y
+endif
+endif
+
+# CMS_DMP_FLAGS += ${BUILD_DSL_FLAGS} ${DSL_GFAST_DEFINES}
+# CMN_COMPILE_FLAGS += ${BUILD_DSL_FLAGS} ${DSL_GFAST_DEFINES}
+
+export BUILD_DSL_FLAGS
+endif # BUILD_DSL
+# ==== end of BUILD_DSL section ====
+
+
+
+# >>>>>>>>>>>>>>> 1.3 DBGFLAGS definition <<<<<<<<<<<<<<<
+# no definition
+
+# >>>>>>>>>>>>>>> 1.4 PROFILERFLAGS definition <<<<<<<<<<<<<<<
+# no definition
+
+
+# >>>>>>>>>>>>>>> 1. CMN_COMPILE_FLAGS definition = 1.1 + 1.2 + 1.3 + 1.4 + etc. <<<<<<<<<<<<<<<
+
+CMN_COMPILE_FLAGS :=
+CMN_COMPILE_FLAGS += ${BUILD_DSL_FLAGS} ${DSL_GFAST_DEFINES}
+
+# this means user wants to have RDD related features as us such as TM
+ifeq ($(BUILD_RDPA),y)
+CMN_COMPILE_FLAGS += -DSUPPORT_RDPA
+#CMS_DMP_FLAGS += -DSUPPORT_RDPA
+endif
+
+ifeq ($(strip $(BRCM_AVS_PWRSAVE)),)
+ifneq ($(strip $(BRCM_MOCA_AVS)),)
+#CMS_DMP_FLAGS += -DSUPPORT_MOCA_AVS
+CMN_COMPILE_FLAGS += -DSUPPORT_MOCA_AVS
+endif
+endif
+
+ifneq ($(strip $(BRCM_HOSTMIPS_PWRSAVE)),)
+#CMS_DMP_FLAGS += -DSUPPORT_HOSTMIPS_PWRSAVE
+CMN_COMPILE_FLAGS += -DSUPPORT_HOSTMIPS_PWRSAVE
+endif
+
+ifneq ($(strip $(BRCM_CPU_FREQ_PWRSAVE)),)
+#CMS_DMP_FLAGS += -DSUPPORT_HOSTMIPS_PWRSAVE
+CMN_COMPILE_FLAGS += -DSUPPORT_HOSTMIPS_PWRSAVE
+endif
+
+ifneq ($(strip $(BRCM_CPUIDLE_CLK_DIVIDER)),)
+#CMS_DMP_FLAGS += -DSUPPORT_HOSTMIPS_PWRSAVE
+CMN_COMPILE_FLAGS += -DSUPPORT_HOSTMIPS_PWRSAVE
+endif
+
+ifneq ($(strip $(BRCM_DDR_SELF_REFRESH_PWRSAVE)),)
+#CMS_DMP_FLAGS += -DSUPPORT_DDR_SELF_REFRESH_PWRSAVE
+CMN_COMPILE_FLAGS += -DSUPPORT_DDR_SELF_REFRESH_PWRSAVE
+endif
+
+ifneq ($(strip $(BRCM_DDR_AUTO_SELF_REFRESH)),)
+#CMS_DMP_FLAGS += -DSUPPORT_DDR_AUTO_SELF_REFRESH
+CMN_COMPILE_FLAGS += -DSUPPORT_DDR_AUTO_SELF_REFRESH
+endif
+
+ifneq ($(strip $(BRCM_ETH_PWRSAVE)),)
+#CMS_DMP_FLAGS += -DSUPPORT_ETH_PWRSAVE
+CMN_COMPILE_FLAGS += -DSUPPORT_ETH_PWRSAVE
+endif
+
+ifneq ($(strip $(BRCM_ENERGY_EFFICIENT_ETHERNET)),)
+#CMS_DMP_FLAGS += -DSUPPORT_ENERGY_EFFICIENT_ETHERNET
+CMN_COMPILE_FLAGS += -DSUPPORT_ENERGY_EFFICIENT_ETHERNET
+endif
+
+ifneq ($(strip $(BRCM_ETH_DEEP_GREEN_MODE)),)
+#CMS_DMP_FLAGS += -DSUPPORT_ETH_DEEP_GREEN_MODE
+CMN_COMPILE_FLAGS += -DSUPPORT_ETH_DEEP_GREEN_MODE
+endif
+
+
+ifeq ($(strip $(BUILD_BRCM_UNFWLCFG)),)
+ifneq ($(strip $(WLCSM_DEBUG_TRACE)),)
+CMN_COMPILE_FLAGS += -DWLCSM_DEBUG
+endif
+endif
+
+ifneq ($(strip $(BRCM_AVS_PWRSAVE)),)
+#CMS_DMP_FLAGS += -DSUPPORT_AVS_PWRSAVE
+CMN_COMPILE_FLAGS += -DSUPPORT_AVS_PWRSAVE
+else
+  ifeq ($(strip $(BRCM_CHIP)),6318)
+  ifneq ($(strip $(BRCM_IKOS)),y)
+    $(error ERROR: AVS Must be enabled on 6318)
+  endif
+endif
+endif
+
+CMN_COMPILE_FLAGS += $(DBGFLAGS) $(PROFILERFLAGS) -D$(TARGET_OS) \
+			-DCHIP_$(BRCM_CHIP) -DCONFIG_BCM9$(BRCM_CHIP)
+
+ifeq ($(BRCM_PORTS_ON_INT_EXT_SW),y)
+CMN_COMPILE_FLAGS += -DBRCM_PORTS_ON_INT_EXT_SW
+endif
+
+
+# >>>>>>>>>>>>>>> 2.1 BRCM_CMS_COMPILER_OPTS definition <<<<<<<<<<<<<<<
+# no definition
+
+# >>>>>>>>>>>>>>> 2.2.1 BRCM_WERROR_CFLAGS definition <<<<<<<<<<<<<<<
+ifeq ($(strip $(DESKTOP_LINUX)),)
+
+ifndef NO_WERRS
+# The new compiler has a bug that if you specify -Werror=frame-larger-than=X, it treats X as 1 (and errors on all functions)
+#export BRCM_WERROR_CFLAGS :=  -Werror=return-type -Werror=uninitialized -Wframe-larger-than=1024  
+export BRCM_WERROR_CFLAGS :=  -Werror=return-type -Werror=uninitialized -Wno-date-time
+else
+export BRCM_WERROR_CFLAGS := -Wno-date-time
+endif
+
+ifeq ($(PROFILE_KERNEL_VER),LINUX_4_19_0)
+BRCM_WERROR_CFLAGS += -Wno-implicit-fallthrough  
+#BRCM_WERROR_CFLAGS += -Wno-implicit-fallthrough -Wno-misleading-indentation -Wno-format-truncation -Wno-stringop-truncation -Wno-format-overflow
+export BRCM_WERROR_CFLAGS
+endif
+
+endif # DESKTOP_LINUX
+
+# >>>>>>>>>>>>>>> 2.2 BRCM_COMMON_CFLAGS definition = 2.2.1 + etc. <<<<<<<<<<<<<<<
+ifeq ($(strip $(DESKTOP_LINUX)),)
+
+ifeq ($(BCM_ARCH),mips)
+BRCM_COMMON_CFLAGS :=  -Os -march=mips32  -fomit-frame-pointer -fno-strict-aliasing -mabi=32 -G0 -msoft-float -pipe -Wa,-mips32 $(BRCM_WERROR_CFLAGS)
+BRCM_APP_CFLAGS :=  $(BRCM_COMMON_CFLAGS) -mno-shared
+endif
+
+ifeq ($(BCM_ARCH),arm)
+BRCM_COMMON_CFLAGS := -Os -march=armv7-a -fomit-frame-pointer -mno-thumb-interwork -mabi=aapcs-linux -marm -fno-common -ffixed-r8 -msoft-float -D__ARM_ARCH_7A__ $(BRCM_WERROR_CFLAGS)
+#for mips' -mno-shared (do not generate posistion independent code), arm is -mno-apcs-reentrant which is the default
+ifeq ($(CMS_MEM_LEAK_TRACING),y)
+# These extra flags are needed by ARM stack backtrace function
+BRCM_COMMON_CFLAGS += -fasynchronous-unwind-tables -rdynamic
+endif
+BRCM_APP_CFLAGS :=  $(BRCM_COMMON_CFLAGS)
+endif  # BCM_ARCH eq arm
+
+endif # DESKTOP_LINUX
+
+
+# >>>>>>>>>>>>>>> 2. CMN_COMPILER_OPTS definition = 2.1 + 2.2 + etc. <<<<<<<<<<<<<<<
+
+ifeq ($(strip $(DESKTOP_LINUX)),y)
+
+#Defines when are are building for Desktop Linux
+
+ifdef BRCM_CMS_COMPILER_OPTS
+CMN_COMPILER_OPTS := -Wall -W $(BRCM_CMS_COMPILER_OPTS) -DDESKTOP_LINUX	-fPIC
+else
+# The -O is needed to detect uninitialized variables, but sometimes prevents
+# gdb from printing out a variable value.  So if you need to do some serious
+# debugging, set BRCM_CMS_COMPILER_OPTS=-g in your shell.
+CMN_COMPILER_OPTS := -Wall -W -O -g -DDESKTOP_LINUX -fPIC
+endif
+
+ifneq ($(strip $(BUILD_DESKTOP_BEEP)),)
+CMN_COMPILER_OPTS += -DBUILD_DESKTOP_BEEP
+endif
+
+ifneq ($(strip $(BCM_ARCH)),x86)
+# Force 32 bit compiles
+CMN_COMPILER_OPTS += -m32
+export BCM_LD_FLAGS := -m32
+endif
+
+else # real target system
+
+# Defines when we are building for real target system
+CMN_COMPILER_OPTS := $(BRCM_COMMON_CFLAGS) -Wall -D$(BCM_ARCH) -g -fPIC
+
+endif # DESKTOP_LINUX
+
+# >>>>>>>>>>>>>>> 3. CUSTOM_CFLAGS definiton <<<<<<<<<<<<<<<
+# no definition
+
+# >>>>>>>>>>>>>>> 4. ALLOWED_INCLUDE_PATHS definiton <<<<<<<<<<<<<<<
+# no definition
+
+# >>>>>>>>>>>>>>> 5. BRCM_WERROR_CFLAGS definiton <<<<<<<<<<<<<<<
+# refer to 2.2.1
+
+# >>>>>>>>>>>>>>> 6. CMN_WLAN_FLAGS definiton <<<<<<<<<<<<<<<
+
+# ==== Wifi (WLAN) config section ====
+# If Wireless driver is selected from menuconfig, that means we want to enable
+# the Wifi feature
+ifneq ($(strip $(BRCM_DRIVER_WIRELESS)), )
+
+ifneq ($(strip $(BUILD_BRCM_UNFWLCFG)),)
+CMN_WLAN_FLAGS += -DBUILD_BRCM_UNFWLCFG
+else
+#CMN_WLAN_FLAGS += -I$(BUILD_DIR)/userspace/private/libs/wlcsm/include
+endif
+
+ifeq ($(strip $(ARCH_ENDIAN)),big)
+CMN_WLAN_FLAGS += -DIL_BIGENDIAN
+endif
+
+CMN_WLAN_FLAGS += -DBRCM_WLAN -DWIRELESS
+CMN_WLAN_FLAGS += -DDSLCPE
+
+ifneq ($(strip $(BUILD_UNIFIED_WLMNGR)),)
+CMN_WLAN_FLAGS += -DWLAN_UNIFIED_WLMNGR
+endif
+
+ifneq ($(strip $(BUILD_BRCM_CPEROUTER)),)
+ CMN_WLAN_FLAGS += -DBCA_CPEROUTER
+else
+ CMN_WLAN_FLAGS += -DDSLCPE_ENDIAN
+endif
+
+ifneq ($(strip $(BUILD_BRCM_HNDROUTER)),)
+CMN_WLAN_FLAGS += -DBCA_HNDROUTER
+endif
+ifeq ($(BRCM_WAPI),y)
+CMN_WLAN_FLAGS += -DBCMWAPI_WPI -DBCMWAPI_WAI
+endif
+
+endif # BRCM_DRIVER_WIRELESS
+
+# >>>>>>>>>>>>>>> 7. CMS_COMPILE_FLAGS definiton <<<<<<<<<<<<<<<
+# TP software won't be CMS. CMS_COMPILE_FLAGS won't be used, So ignore it.
+
+
+# >>>>>>>>>>>>>>> CFLAGS definiton = 1 + 2 + 3 + 4 + 5 + 6 + 7 + etc. <<<<<<<<<<<<<<<
+
+CFLAGS = $(CMN_COMPILE_FLAGS) $(CMN_COMPILER_OPTS) $(CUSTOM_CFLAGS) $(ALLOWED_INCLUDE_PATHS)
+#CFLAGS += -I$(TOOLCHAIN)/include -L$(TOOLCHAIN)/lib
+CFLAGS += $(BRCM_WERROR_CFLAGS)
+
+ifeq ($(strip $(KERNEL_ARCH)),aarch64)
+CFLAGS += -DKERNEL_64
+else ifeq ($(strip $(DESKTOP_LINUX)),y)
+CFLAGS += -DKERNEL_32
+endif
+
+ifeq ($(BCM_PON),y)
+CFLAGS += -DBCM_PON
+endif
+ifeq ($(BCM_PON_XRDP),y)
+CFLAGS += -DBCM_PON_XRDP
+endif
+ifeq ($(BCM_PON_RDP),y)
+CFLAGS += -DBCM_PON_RDP
+endif
+ifeq ($(BCM_DSL_XRDP),y)
+CFLAGS += -DBCM_DSL_XRDP
+endif
+ifeq ($(BCM_DSL_RDP),y)
+CFLAGS += -DBCM_DSL_RDP
+endif
+ifeq ($(BCM_XRDP),y)
+CFLAGS += -DBCM_XRDP
+endif
+ifeq ($(BCM_RDP),y)
+CFLAGS += -DBCM_RDP
+endif
+
+ifneq ($(strip $(BRCM_DRIVER_GPON)_$(BUILD_GPON)),_)
+CFLAGS += -DCONFIG_BCM_MAX_GEM_PORTS=$(BCM_MAX_GEM_PORTS)
+#export WAN_AUTODETECT=y
+else
+# This is just to hide the error in rut_gponrg_light.c; this file should not compile for non-gpon
+CFLAGS += -DCONFIG_BCM_MAX_GEM_PORTS=1
+endif
+
+ifneq ($(strip $(EPON_ONU_TYPE)),)
+CFLAGS += -D$(EPON_ONU_TYPE)
+endif
+
+ifneq ($(strip $(BRCM_VOICE_SUPPORT)),)
+CFLAGS += $(VOICE_CFLAGS)
+endif
+
+# nocms also needs wlan flags
+ifneq ($(strip $(BUILD_BRCM_BASE_SHELL)),)
+CFLAGS += $(CMN_WLAN_FLAGS)
+endif
+
+ifneq ($(strip $(BUILD_BRCM_CMS)),)
+BUILD_TR181_WLMNGR = $(or $(strip $(BUILD_DM_PURE181)), $(strip $(BUILD_DM_DETECT)),$(strip $(BUILD_UNIFIED_WLMNGR)))
+else
+ifneq ($(strip $(BUILD_BRCM_HNDROUTER_ALONE)),)
+else
+BUILD_TR181_WLMNGR = y
+endif
+endif
+
+ifneq ($(strip $(BUILD_BRCM_CMS)),)
+
+CFLAGS += $(CMS_COMPILE_FLAGS) $(CMN_WLAN_FLAGS)
+ifneq ($(strip $(BRCM_DRIVER_WIRELESS)), )
+ifneq ($(strip $(BUILD_TR181_WLMNGR)),)
+CFLAGS += -DSUPPORT_TR181_WLMNGR
+endif
+endif
+
+endif # BUILD_BRCM_CMS
+
+#
+# - SDK/make.common
+######################################################################

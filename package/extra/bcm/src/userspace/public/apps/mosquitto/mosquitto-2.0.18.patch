@@ -1,0 +1,83 @@
+--- mosquitto-2.0.15_x/mosquitto.conf	2022-08-16 21:34:02.000000000 +0800
++++ mosquitto-2.0.15/mosquitto.conf	2023-06-19 15:55:02.020528711 +0800
+@@ -206,7 +206,8 @@
+ # If run as a non-root user, this setting has no effect.
+ # Note that on Windows this has no effect and so mosquitto should be started by
+ # the user you wish it to run as.
+-#user mosquitto
++# user mosquitto
++user admin
+ 
+ # =================================================================
+ # Listeners
+--- mosquitto-2.0.15_x/config.mk	2022-08-16 21:34:02.000000000 +0800
++++ mosquitto-2.0.15/config.mk	2023-06-19 15:55:02.020528711 +0800
+@@ -171,8 +171,8 @@ BROKER_LDADD:=
+ 
+ CLIENT_CPPFLAGS:=$(CPPFLAGS) -I.. -I../include
+ CLIENT_CFLAGS:=${CFLAGS} -DVERSION="\"${VERSION}\""
+-CLIENT_LDFLAGS:=$(LDFLAGS) -L../lib
+-CLIENT_LDADD:=
++CLIENT_LDFLAGS:=$(LDFLAGS) -L../lib 
++CLIENT_LDADD:=-L$(BCM_FSBUILD_DIR)/public/lib
+ 
+ PASSWD_LDADD:=
+ 
+@@ -196,7 +196,10 @@ ifeq ($(UNAME),Linux)
+ endif
+ 
+ ifeq ($(WITH_SHARED_LIBRARIES),yes)
+-	CLIENT_LDADD:=${CLIENT_LDADD} ../lib/libmosquitto.so.${SOVERSION}
++	CLIENT_LDADD:=${CLIENT_LDADD} ../lib/libmosquitto.so.${SOVERSION} 
++ifeq ($(WITH_TLS),yes)
++	CLIENT_LDADD+= -lssl -lcrypto
++endif
+ endif
+ 
+ ifeq ($(UNAME),SunOS)
+@@ -237,19 +240,19 @@ ifeq ($(WITH_WRAP),yes)
+ endif
+ 
+ ifeq ($(WITH_TLS),yes)
+-	APP_CPPFLAGS:=$(APP_CPPFLAGS) -DWITH_TLS
+-	BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_TLS
+-	BROKER_LDADD:=$(BROKER_LDADD) -lssl -lcrypto
+-	CLIENT_CPPFLAGS:=$(CLIENT_CPPFLAGS) -DWITH_TLS
+-	LIB_CPPFLAGS:=$(LIB_CPPFLAGS) -DWITH_TLS
+-	LIB_LIBADD:=$(LIB_LIBADD) -lssl -lcrypto
+-	PASSWD_LDADD:=$(PASSWD_LDADD) -lcrypto
+-	STATIC_LIB_DEPS:=$(STATIC_LIB_DEPS) -lssl -lcrypto
++	APP_CPPFLAGS:=$(APP_CPPFLAGS) -DWITH_TLS -I$(BCM_FSBUILD_DIR)/public/include
++	BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_TLS -I$(BCM_FSBUILD_DIR)/public/include
++	BROKER_LDADD:=$(BROKER_LDADD) -lssl -lcrypto -L$(BCM_FSBUILD_DIR)/public/lib
++	CLIENT_CPPFLAGS:=$(CLIENT_CPPFLAGS) -DWITH_TLS -I$(BCM_FSBUILD_DIR)/public/include -L$(BCM_FSBUILD_DIR)/public/lib
++	LIB_CPPFLAGS:=$(LIB_CPPFLAGS) -DWITH_TLS -I$(BCM_FSBUILD_DIR)/public/include
++	LIB_LIBADD:=$(LIB_LIBADD) -lssl -lcrypto -L$(BCM_FSBUILD_DIR)/public/lib
++	PASSWD_LDADD:=$(PASSWD_LDADD) -lcrypto -L$(BCM_FSBUILD_DIR)/public/lib
++	STATIC_LIB_DEPS:=$(STATIC_LIB_DEPS) -lssl -lcrypto -L$(BCM_FSBUILD_DIR)/public/lib
+ 
+ 	ifeq ($(WITH_TLS_PSK),yes)
+-		BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_TLS_PSK
+-		LIB_CPPFLAGS:=$(LIB_CPPFLAGS) -DWITH_TLS_PSK
+-		CLIENT_CPPFLAGS:=$(CLIENT_CPPFLAGS) -DWITH_TLS_PSK
++		BROKER_CPPFLAGS:=$(BROKER_CPPFLAGS) -DWITH_TLS_PSK -I$(BCM_FSBUILD_DIR)/public/include
++		LIB_CPPFLAGS:=$(LIB_CPPFLAGS) -DWITH_TLS_PSK -I$(BCM_FSBUILD_DIR)/public/include
++		CLIENT_CPPFLAGS:=$(CLIENT_CPPFLAGS) -DWITH_TLS_PSK -I$(BCM_FSBUILD_DIR)/public/include
+ 	endif
+ endif
+ 
+@@ -334,12 +337,12 @@ ifeq ($(WITH_WEBSOCKETS),yes)
+ endif
+ 
+ INSTALL?=install
+-prefix?=/usr/local
++prefix?=
+ incdir?=${prefix}/include
+ libdir?=${prefix}/lib${LIB_SUFFIX}
+ localedir?=${prefix}/share/locale
+ mandir?=${prefix}/share/man
+-STRIP?=strip
++STRIP?=$(SSTRIP) 
+ 
+ ifeq ($(WITH_STRIP),yes)
+ 	STRIP_OPTS?=-s --strip-program=${CROSS_COMPILE}${STRIP}

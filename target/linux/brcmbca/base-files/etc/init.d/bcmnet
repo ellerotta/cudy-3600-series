@@ -1,0 +1,48 @@
+#!/bin/sh /etc/rc.common
+# For broadcom chips
+
+START=19
+
+include /lib/network
+
+start () {
+    . /lib/functions.sh
+    # runner platform bs tool
+    [ ! -e /var/bdmf_sh_id ] && test -e /etc/rdpa_init.sh && /etc/rdpa_init.sh
+
+    local NEED_DISABLE_HW_STP=0
+
+    case $(board_name) in
+        brcm,brcm-v8A | \
+        brcm,bcm96846 | \
+        brcm,bcm96855 | \
+        brcm,bcm96878 | \
+        brcm,brcm94908ref)
+            NEED_DISABLE_HW_STP=1
+        ;;
+    esac
+
+    for ifname in `(cd /sys/class/net ; echo eth*)`
+    do
+        [ -z ${ifname} ] && continue
+        not_include_dot=`echo $ifname | grep -q '\.'; echo $?`
+        if [ $not_include_dot -eq 1 ]; then
+            # flag=257 => 1 (create subsidiary queues) + 256 (scheduler type SP)
+            tmctl porttminit --devtype 0 --if ${ifname} --flag 257
+
+	    #disable switch spanning tree
+            if [ $NEED_DISABLE_HW_STP -eq 1 ]; then
+                ethswctl -c hwstp -i $ifname -o disable 2>/dev/null
+            fi
+        fi
+    done
+
+    config_ethports_wan_attr
+
+    if [ -e /etc/adsl/adsl_phy.bin ]
+    then
+        #dsldiagd&
+        adsl start --up
+        xdslctl connection --up  2>/dev/null
+    fi
+}

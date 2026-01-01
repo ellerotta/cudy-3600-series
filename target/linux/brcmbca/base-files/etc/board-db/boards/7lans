@@ -1,0 +1,7 @@
+
+config board 'board'
+	# Hardware specs
+	# DSL PON WIFI SF/Runner Ethernet
+	option ethernetPortNames 'LAN1 LAN2 LAN3 LAN4 LAN5 LAN6 LAN'
+	option ethernetPortOrder 'eth1 eth2 eth3 eth4 eth5 eth6 eth1'
+	option ethernetLanPorts 'eth1 eth2 eth3 eth4 eth5 eth6 eth1'

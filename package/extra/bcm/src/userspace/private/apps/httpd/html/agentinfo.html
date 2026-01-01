@@ -1,0 +1,58 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Agent Information</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      $(document).ready(function() {
+        //document.getElementById('defaultTab').click();
+      });
+
+      function bodyLoad() {
+        var agentInfo = '<%ejGetOther(uspGetAgentInfo)%>';
+        var info = agentInfo.split('|');
+        var txtObj = document.getElementById('endpointId');
+
+        if (info[0] != undefined)
+          txtObj.value = info[0];
+        txtObj = document.getElementById('version');
+        if (info[1] != undefined)
+          txtObj.value = info[1];
+        txtObj = document.getElementById('upTime');
+        if (info[2] != undefined)
+          txtObj.value = info[2];
+        txtObj = document.getElementById('proto');
+        if (info[3] != undefined)
+          txtObj.value = info[3];
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>Agent Information</h3><br>
+    <div id='agent-info'><center>
+      <table id='tblAgentInfo' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd' width='105'>Endpoint ID</td>
+            <td><input type='text' id='endpointId' disabled></td>
+          </tr>
+          <tr>
+            <td class='hd'>Software Version</td>
+            <td><input type='text' id='version' disabled></td>
+          </tr>
+          <tr>
+            <td class='hd'>Up Time</td>
+            <td><input type='text' id='upTime' disabled></td>
+          </tr>
+          <tr>
+            <td class='hd'>Supported Protocols</td>
+            <td><input type='text' id='proto' disabled></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </form>
+  </body>
+</html>

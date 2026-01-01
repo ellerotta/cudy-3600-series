@@ -1,0 +1,54 @@
+if TARGET_brcmbca
+menu "BDK Variable Configuration"
+
+choice
+	prompt "OpenWRT compile toolchain selection"
+	default USER_ARCH_ARM_SOFTFP
+	help
+	Version of the Userspace build architecture.
+
+config USER_ARCH_ARM
+	bool
+	prompt "userspace use arm"
+
+config USER_ARCH_ARM_SOFTFP
+	bool
+	prompt "userspace use softfp"
+
+config USER_ARCH_AARCH64
+	bool
+	prompt "userspace use aarch64"
+
+endchoice
+
+
+config BCM_CHIP_ID
+	int
+	prompt "Broadcom chip id"
+	default "63178"
+	help
+	  Broadcom chip id for package
+
+config BCM_PROFILE
+	string
+	prompt "Broadcom profile name"
+	default "96764GW_WL23D2D1GA_WLMLO"
+	help
+		Broadcom chip profile
+
+config BCM_WLIMPL
+	int
+	prompt "Broadcom wlan impl"
+	default "103"
+	help
+		Broadcom wlan impl
+
+config WL_TEST
+  bool "wl test"
+  default n
+
+endmenu
+
+
+
+endif

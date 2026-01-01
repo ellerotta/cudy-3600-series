@@ -1,0 +1,114 @@
+From 469c11c322724bd9490ada9207c2c2e47950c8a3 Mon Sep 17 00:00:00 2001
+From: Kursad Oney <kursad.oney@broadcom.com>
+Date: Thu, 7 Sep 2023 09:36:50 -0400
+Subject: [PATCH] example scripts
+
+---
+ make_brcm_ot-cli.sh     |  3 +++
+ make_brcm_ot-daemon.sh  |  4 ++++
+ start_brcm_ot-cli.sh    | 28 ++++++++++++++++++++++++++++
+ start_brcm_ot-ctl.sh    |  5 +++++
+ start_brcm_ot-daemon.sh | 23 +++++++++++++++++++++++
+ 5 files changed, 63 insertions(+)
+ create mode 100755 make_brcm_ot-cli.sh
+ create mode 100755 make_brcm_ot-daemon.sh
+ create mode 100755 start_brcm_ot-cli.sh
+ create mode 100755 start_brcm_ot-ctl.sh
+ create mode 100755 start_brcm_ot-daemon.sh
+
+diff --git a/make_brcm_ot-cli.sh b/make_brcm_ot-cli.sh
+new file mode 100755
+index 0000000..f5dd677
+--- /dev/null
++++ b/make_brcm_ot-cli.sh
+@@ -0,0 +1,3 @@
++#!/bin/sh
++make -f src/posix/Makefile-posix FULL_LOGS=1 CSL_RECEIVER=1 DUA=1 LINK_METRICS_INITIATOR=1 LINK_METRICS_SUBJECT=1 -j8
++
+diff --git a/make_brcm_ot-daemon.sh b/make_brcm_ot-daemon.sh
+new file mode 100755
+index 0000000..7cec0ef
+--- /dev/null
++++ b/make_brcm_ot-daemon.sh
+@@ -0,0 +1,4 @@
++#!/bin/sh
++
++make -f src/posix/Makefile-posix DAEMON=1 FULL_LOGS=1 CSL_RECEIVER=1 DUA=1 LINK_METRICS_INITIATOR=1 LINK_METRICS_SUBJECT=1 -j8
++
+diff --git a/start_brcm_ot-cli.sh b/start_brcm_ot-cli.sh
+new file mode 100755
+index 0000000..95387b7
+--- /dev/null
++++ b/start_brcm_ot-cli.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash
++
++##############################################################################
++# Launch OpenThread simulator with BRCM RCP
++#
++# Prerequisite: build Openthread posix simulator (e.g. using mSpinel.sh)
++##############################################################################
++
++# Usage: start_brcm_ot-cli.sh <port> [<baud>]
++
++# Check for uart
++if [[ $1 == *"tty"* ]]; then
++    #if uart, check for baudrate, if not specified, use 115200
++    if [ -z "$2" ]; then
++        BAUD=115200
++    else
++        BAUD=$2
++    fi
++    CMD='./ot-cli -v spinel+hdlc+uart://'$1'?uart-baudrate='$BAUD'&uart-flow-control=1'
++else
++    CMD='./ot-cli -v spinel+hdlc://'$1
++fi
++
++sudo chmod 666 $1
++cd output/posix/bin/
++echo $CMD
++$CMD
++
+diff --git a/start_brcm_ot-ctl.sh b/start_brcm_ot-ctl.sh
+new file mode 100755
+index 0000000..9a3ec17
+--- /dev/null
++++ b/start_brcm_ot-ctl.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++
++# Usage: start_brcm_ot-ctl.sh
++#
++sudo ./build/posix/src/posix/ot-ctl
+diff --git a/start_brcm_ot-daemon.sh b/start_brcm_ot-daemon.sh
+new file mode 100755
+index 0000000..7fb7d95
+--- /dev/null
++++ b/start_brcm_ot-daemon.sh
+@@ -0,0 +1,23 @@
++#!/bin/bash
++
++# Usage: start_brcm_ot-daemon.sh <port> [<baud>]
++#   e.g. start_brcm_ot-daemon.sh /dev/ttyUSB0 3000000
++#
++
++# Check for uart
++if [[ $1 == *"tty"* ]]; then
++    #if uart, check for baudrate, if not specified, use 115200
++    if [ -z "$2" ]; then
++        BAUD=115200
++    else
++        BAUD=$2
++    fi
++    PARAMS='spinel+hdlc+uart://'$1'?uart-baudrate='$BAUD'&uart-flow-control=1'
++else
++    PARAMS='spinel+hdlc://'$1
++fi
++
++echo ./build/posix/src/posix/ot-daemon -v $PARAMS
++echo
++
++sudo ./build/posix/src/posix/ot-daemon -v $PARAMS
+-- 
+2.37.3
+

@@ -1,0 +1,166 @@
+From 24f1c96246bf5261b46b0ca34ce3f209060bc700 Mon Sep 17 00:00:00 2001
+From: Yongchan Kwon <yc.kwon@broadcom.com>
+Date: Fri, 28 Apr 2023 17:05:42 +0900
+Subject: [PATCH 1/2] CSL and RxOnWhenIdle are ported and verified
+
+---
+ src/core/mac/mac.cpp                          |  8 +++++++
+ src/core/mac/sub_mac.cpp                      |  2 ++
+ src/core/mac/sub_mac.hpp                      | 10 +++++++++
+ src/core/radio/radio_platform.cpp             | 21 -------------------
+ src/lib/spinel/radio_spinel_impl.hpp          |  5 +++++
+ .../platform/openthread-core-posix-config.h   |  7 +++++++
+ 7 files changed, 33 insertions(+), 22 deletions(-)
+
+diff --git a/src/core/mac/mac.cpp b/src/core/mac/mac.cpp
+index 7a129135b..ced9f257f 100644
+--- a/src/core/mac/mac.cpp
++++ b/src/core/mac/mac.cpp
+@@ -559,11 +559,13 @@ void Mac::UpdateIdleMode(void)
+     if (shouldSleep)
+     {
+ #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
++#if (!defined(BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) || !BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) // [brcm] csl handled by fw (can remain in "Sleep" mode)
+         if (IsCslEnabled())
+         {
+             mLinks.CslSample();
+             ExitNow();
+         }
++#endif // !BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE
+ #endif
+         mLinks.Sleep();
+         LogDebg("Idle mode: Radio sleeping");
+@@ -1349,6 +1351,12 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
+     }
+ #endif // OPENTHREAD_CONFIG_MULTI_RADIO
+ 
++
++#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE) // Vendor TxDone fields
++     LogInfo("HandleTransmitDone: mOperation=%d aError=%d TX Retries=%d, TX Power=%d",
++             mOperation, aError, aFrame.mInfo.mTxInfo.mBrcmRetryCount, aFrame.mInfo.mTxInfo.mBrcmTxPower);
++#endif // BRCM_OPENTHREAD_ENABLE
++
+     // Determine next action based on current operation.
+ 
+     switch (mOperation)
+diff --git a/src/core/mac/sub_mac.cpp b/src/core/mac/sub_mac.cpp
+index 194647023..e64a5f751 100644
+--- a/src/core/mac/sub_mac.cpp
++++ b/src/core/mac/sub_mac.cpp
+@@ -1075,12 +1075,14 @@ bool SubMac::UpdateCsl(uint16_t aPeriod, uint8_t aChannel, otShortAddress aShort
+     IgnoreError(Get<Radio>().EnableCsl(aPeriod, aShortAddr, aExtAddr));
+ 
+     mCslTimer.Stop();
++#if (!defined(BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) || !BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) // [brcm] Do not start csl timer for CSL wake/sleep (this his handled by brcm radio)
+     if (mCslPeriod > 0)
+     {
+         mCslSampleTime = TimeMicro(static_cast<uint32_t>(otPlatRadioGetNow(&GetInstance())));
+         mIsCslSampling = false;
+         HandleCslTimer();
+     }
++#endif // [brcm]
+ 
+ exit:
+     return retval;
+diff --git a/src/core/mac/sub_mac.hpp b/src/core/mac/sub_mac.hpp
+index 7d3c952ee..3ed877ae4 100644
+--- a/src/core/mac/sub_mac.hpp
++++ b/src/core/mac/sub_mac.hpp
+@@ -47,6 +47,10 @@
+ #include "mac/mac_frame.hpp"
+ #include "radio/radio.hpp"
+ 
++#if (defined(BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) && BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE)
++#include "../../../examples/platforms/brcm/include/brcm_radio_csl.h"
++#endif /* BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE */
++
+ namespace ot {
+ 
+ /**
+@@ -433,7 +437,13 @@ public:
+      * @param[in] aCslAccuracy  The parent CSL accuracy.
+      *
+      */
++#if (defined(BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) && BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE)
++    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy) { mCslParentAccuracy = aCslAccuracy;
++                                                                 otPlatRadioBrcmSetCslParentClockAccuracy(reinterpret_cast<otInstance *>(&GetInstance()), aCslAccuracy.GetClockAccuracy());
++                                                                 otPlatRadioBrcmSetCslParentUncertainty(reinterpret_cast<otInstance *>(&GetInstance()), aCslAccuracy.GetUncertainty());}
++#else
+     void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy) { mCslParentAccuracy = aCslAccuracy; }
++#endif /* !BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE */
+ 
+ #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+ 
+diff --git a/src/core/radio/radio_platform.cpp b/src/core/radio/radio_platform.cpp
+index 1d906709e..f899d52b3 100644
+--- a/src/core/radio/radio_platform.cpp
++++ b/src/core/radio/radio_platform.cpp
+@@ -325,24 +325,3 @@ OT_TOOL_WEAK otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChanne
+     return kErrorNotImplemented;
+ }
+ 
+-#if (defined(BRCM_OPENTHREAD_ENABLE) && BRCM_OPENTHREAD_ENABLE)
+-void otPlatRadioUpdateCslSampleTime(otInstance *aInstance, uint32_t aCslSampleTime)
+-{
+-    /* todo : need to check */
+-    OT_UNUSED_VARIABLE(aInstance);
+-    OT_UNUSED_VARIABLE(aCslSampleTime);
+-}
+-
+-otError otPlatRadioEnableCsl(otInstance         *aInstance,
+-                             uint32_t            aCslPeriod,
+-                             otShortAddress      aShortAddr,
+-                             const otExtAddress *aExtAddr)
+-{
+-    /* todo : need to check */
+-    OT_UNUSED_VARIABLE(aInstance);
+-    OT_UNUSED_VARIABLE(aCslPeriod);
+-    OT_UNUSED_VARIABLE(aShortAddr);
+-    OT_UNUSED_VARIABLE(aExtAddr);
+-    return kErrorNotImplemented;
+-}
+-#endif
+diff --git a/src/lib/spinel/radio_spinel_impl.hpp b/src/lib/spinel/radio_spinel_impl.hpp
+index 3d995cc69..44d71da79 100644
+--- a/src/lib/spinel/radio_spinel_impl.hpp
++++ b/src/lib/spinel/radio_spinel_impl.hpp
+@@ -1087,6 +1087,10 @@ void RadioSpinel<InterfaceType, ProcessContextType>::RadioReceive(void)
+ {
+     if (!mIsPromiscuous)
+     {
++#if (defined(BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) && BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE) // BRCM RCP allows receiving for all states on the host except kStateDisabled (to support CSL in RCP)
++        if (mState == kStateDisabled)
++            ExitNow();
++#else   // !BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE
+         switch (mState)
+         {
+         case kStateDisabled:
+@@ -1098,6 +1102,7 @@ void RadioSpinel<InterfaceType, ProcessContextType>::RadioReceive(void)
+         case kStateTransmitDone:
+             break;
+         }
++#endif // !BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE
+     }
+ 
+ #if OPENTHREAD_CONFIG_DIAG_ENABLE
+diff --git a/src/posix/platform/openthread-core-posix-config.h b/src/posix/platform/openthread-core-posix-config.h
+index ddb25e63f..eddc3759d 100644
+--- a/src/posix/platform/openthread-core-posix-config.h
++++ b/src/posix/platform/openthread-core-posix-config.h
+@@ -271,6 +271,13 @@
+  *
+  */
+ #define BRCM_OPENTHREAD_REDIRECT_DBFW_VSE 1
++/**
++ * @def BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE
++ *
++ * Define to 1 to enable brcm csl reciever (enables setting csl related parameters in RCP using spinel)
++ *
++ */
++#define BRCM_OPENTHREAD_CSL_RECEIVER_ENABLE 1
+ /**
+  * @def OPENTHREAD_CONFIG_HISTORY_TRACKER_ENABLE
+  *
+-- 
+2.25.1
+

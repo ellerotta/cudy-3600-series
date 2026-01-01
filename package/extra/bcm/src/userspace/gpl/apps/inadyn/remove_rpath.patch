@@ -1,0 +1,11 @@
+--- inadyn-2.9.1/configure	2021-12-10 03:52:10.000000000 +0800
++++ configure.new	2022-07-27 16:20:54.279222603 +0800
+@@ -10840,7 +10840,7 @@
+     # are reset later if shared libraries are not supported. Putting them
+     # here allows them to be overridden if necessary.
+     runpath_var=LD_RUN_PATH
+-    hardcode_libdir_flag_spec='$wl-rpath $wl$libdir'
++    # hardcode_libdir_flag_spec='$wl-rpath $wl$libdir'
+     export_dynamic_flag_spec='$wl--export-dynamic'
+     # ancient GNU ld didn't support --whole-archive et. al.
+     if $LD --help 2>&1 | $GREP 'no-whole-archive' > /dev/null; then

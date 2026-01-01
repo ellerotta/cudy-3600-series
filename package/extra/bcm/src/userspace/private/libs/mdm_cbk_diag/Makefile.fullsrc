@@ -1,0 +1,25 @@
+OBJS := mdm2_oidInfoArray.o \
+        mdm2_init_diag.o \
+        rcl_diagcomp.o stl_diagcomp.o \
+        rcl_spdsvc.o stl_spdsvc.o rut_spdsvc.o \
+        rcl2_ipdiag.o stl2_ipdiag.o rut2_ipdiag.o
+
+CFLAGS += -Werror -Wfatal-errors
+
+ifneq ($(strip $(BUILD_SPDTEST)),)
+CFLAGS += -DBRCM_SPDTEST
+endif
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive
+
+
+binaryonly_prepare:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

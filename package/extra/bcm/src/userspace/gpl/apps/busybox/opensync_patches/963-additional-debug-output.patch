@@ -1,0 +1,51 @@
+--- a/networking/udhcp/dhcpc.c
++++ b/networking/udhcp/dhcpc.c
+@@ -34,6 +34,7 @@
+ #include <netinet/if_ether.h>
+ #include <linux/filter.h>
+ #include <linux/if_packet.h>
++#include <netinet/ether.h>
+ 
+ #ifndef PACKET_AUXDATA
+ # define PACKET_AUXDATA 8
+@@ -1248,6 +1249,9 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 	/* Set up the signal pipe on fds 3,4 - must be before openlog() */
+ 	udhcp_sp_setup();
+ 
++	/* CHECKME: Q'n'D temporary workaround, hardcode verbosity level [ESW-1836] */
++	IF_UDHCP_VERBOSE(dhcp_verbose = 1;)
++
+ 	/* Parse command line */
+ 	opt = getopt32long(argv, "^"
+ 		/* O,x: list; -T,-t,-A take numeric param */
+@@ -1433,6 +1437,8 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 		 * resend discover/renew/whatever
+ 		 */
+ 		if (retval == 0) {
++			int last_client_data_ifindex = client_data.ifindex;
++
+ 			/* When running on a bridge, the ifindex may have changed
+ 			 * (e.g. if member interfaces were added/removed
+ 			 * or if the status of the bridge changed).
+@@ -1445,6 +1451,21 @@ int udhcpc_main(int argc UNUSED_PARAM, c
+ 			) {
+ 				goto ret0; /* iface is gone? */
+ 			}
++
++			if (client_data.ifindex != last_client_data_ifindex) {
++				log1("ifindex changed: was %d, now %d", last_client_data_ifindex, client_data.ifindex);
++			}
++			if (clientid_mac_ptr == NULL) {
++				log1("clientid_mac_ptr is NULL");
++			} else {
++				if (memcmp(clientid_mac_ptr, client_data.client_mac, 6) != 0) {
++					log1("client_mac changed: was %s, now %s",
++						ether_ntoa(clientid_mac_ptr), ether_ntoa((void *)client_data.client_mac)
++					);
++				}
++			}
++			log1("proceeding with ifindex %d and client_mac %s", client_data.ifindex, ether_ntoa((void *)client_data.client_mac));
++
+ 			if (clientid_mac_ptr)
+ 				memcpy(clientid_mac_ptr, client_data.client_mac, 6);
+ 

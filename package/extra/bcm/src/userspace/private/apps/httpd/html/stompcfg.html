@@ -1,0 +1,181 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>STOMP Add</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'stompcfg.cgi?';
+        var num = 0;
+
+        // validate virtual host
+        num = document.getElementById('virtualhost').value.length;
+        if (num > 255) {
+          alert('Virtual host is too long. Max length is 255.');
+          return;
+        }
+        // validate host
+        num = document.getElementById('host').value.length;
+        if (num > 255) {
+          alert('Host is too long. Max length is 255.');
+          return;
+        }
+        // validate port
+        if (isNaN(document.getElementById('port').value)) {
+          alert('port is not a number.');
+          return;
+        }
+        num = parseInt(document.getElementById('port').value);
+        if (num < 1 || num > 65535)
+        {
+          alert('port ' + num + ' is out of range [1-65535].');
+          return;
+        }
+        // validate username
+        num = document.getElementById('username').value.length;
+        if (num > 255) {
+          alert('Username is too long. Max length is 255.');
+          return;
+        }
+        // validate password
+        num = document.getElementById('password').value.length;
+        if (num > 255) {
+          alert('Password is too long. Max length is 255.');
+          return;
+        }
+        
+        // Enable Connection
+        if (document.getElementById('enableConn-1').checked)
+          val += '1,';
+        else
+          val += '0,';
+        // Enable Encryption
+        if (document.getElementById('enableEncrypt-1').checked)
+          val += '1,';
+        else
+          val += '0,';
+        // Alias
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split(',');
+            val += info[2] + ',';
+          } else
+            val += ',';
+        } else
+          val += ',';
+        // Virtual Host
+        val += document.getElementById('virtualhost').value + ',';
+        // Host
+        val += document.getElementById('host').value + ',';
+        // Port
+        val += document.getElementById('port').value + ',';
+        // Username
+        val += document.getElementById('username').value + ',';
+        // Password
+        val += document.getElementById('password').value;
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function bodyLoad() {
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split(',');
+            // Enable Connection
+            if (info[0] == 'Yes')
+              document.getElementById('enableConn-1').checked = true;
+            else
+              document.getElementById('enableConn-0').checked = true;
+            // Enable Encryption
+            if (info[1] == 'Yes')
+              document.getElementById('enableEncrypt-1').checked = true;
+            else
+              document.getElementById('enableEncrypt-0').checked = true;
+            // Virtual Host
+            document.getElementById('virtualhost').value = info[3];
+            // Host
+            document.getElementById('host').value = info[4];
+            // Port
+            document.getElementById('port').value = info[5];
+            // Username
+            document.getElementById('username').value = info[6];
+            // Password
+            document.getElementById('password').value = info[7];
+          }
+
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          // Enable Connection
+          document.getElementById('enableConn-0').checked = true;
+          // Enable Encryption
+          document.getElementById('enableEncrypt-1').checked = true;
+          // Default Port
+          document.getElementById('port').value = '61613';
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>STOMP Configuration</h3><br>
+    <br>
+    <div><center>
+    <table border='1' cellpadding='4' cellspacing='0'>
+      <tbody>
+        <tr>
+          <td class='hd'>Enable Connection</td>
+          <td><input name='enableConn' id='enableConn-0' type='radio'>  Disable</td>
+          <td><input name='enableConn' id='enableConn-1' type='radio'>  Enable</td>
+        </tr>
+        <tr>
+          <td class='hd'>Enable Encryption</td>
+          <td><input name='enableEncrypt' id='enableEncrypt-0' type='radio'>  Disable</td>
+          <td><input name='enableEncrypt' id='enableEncrypt-1' type='radio'>  Enable</td>
+        </tr>
+        <tr height='25'>
+        </tr>
+        <tr>
+          <td class='hd'>Virtual Host</td>
+          <td colspan='2'><input type='text' id='virtualhost'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Host</td>
+          <td colspan='2'><input type='text' id='host'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Port</td>
+          <td colspan='2'><input type='text' id='port'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Username</td>
+          <td colspan='2'><input type='text' id='username'></td>
+        </tr>
+        <tr>
+          <td class='hd'>Password</td>
+          <td colspan='2'><input type='password' id='password'></td>
+        </tr>
+      </tbody>
+    </table>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+    </div>
+  </form>
+  </body>
+</html>

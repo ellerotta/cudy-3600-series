@@ -1,0 +1,58 @@
+
+/*
+ * Copyright (C) 2017 Rockchip Electronic Co.,Ltd
+ * Copyright (C) 2019 Broadcom
+ *
+ * Simple U-boot fit source file containing U-Boot, dtb and optee
+ */
+
+/dts-v1/;
+
+/ {
+	description = "Simple image with ATF and optional OP-TEE support";
+	#address-cells = <1>;
+	ident_1 = "@(#) $imageversion: 5044p3GW_WL23D2D1GA_WLMLO1651633(BSPv1W13) $";
+	ident_2 = "@(#) $imageversion: 5044p3GW_WL23D2D1GA_WLMLO1651633(BSPv1W13) $";
+	ident_3 = "@(#) $imgversion: 5.04L.04p3 $";
+	ident_4 = "@(#) $imgversion: 5.04L.04p3 $";
+
+
+	images {
+		kernel {
+			description = "Linux kernel";
+			data = /incbin/("../../obj/uboot/vmlinux.bin.lzma");
+			type = "kernel";
+			os = "linux";
+			arch = "arm";
+			compression = "lzma";
+			load = <0x108000>;
+			entry = <0x108000>;
+			
+			hash-1 {
+				algo = "sha256";
+			};
+
+		};
+		fdt_96764SV1 {
+			description = "dtb";
+			data = /incbin/("../../obj/binaries/linux//96764SV1.dtb");
+			arch = "arm";
+			type = "flat_dt";
+			compression = "none";
+			
+			hash-1 {
+				algo = "sha256";
+				value = [0000000000000000000000000000000000000000000000000000000000000000];
+			};
+
+		};
+	};
+	configurations {
+		default = "conf_ub_96764SV1";
+		conf_lx_96764SV1 {
+			description = "BRCM 63xxx linux";
+			kernel = "kernel";
+			fdt = "fdt_96764SV1";
+		};		
+	};
+};

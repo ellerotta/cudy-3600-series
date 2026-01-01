@@ -1,0 +1,138 @@
+diff -ruN redsocks/log.c redsocks.new/log.c
+--- redsocks/log.c	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/log.c	2021-07-30 15:07:33.175337543 -0700
+@@ -19,7 +19,7 @@
+ #include <errno.h>
+ #include <sys/time.h>
+ #include <sys/types.h>
+-#include <event.h>
++#include <event2/event.h>
+ #include "utils.h"
+ #include "log.h"
+ 
+diff -ruN redsocks/main.c redsocks.new/main.c
+--- redsocks/main.c	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/main.c	2021-07-30 16:14:29.625256628 -0700
+@@ -21,7 +21,9 @@
+ #include <signal.h>
+ #include <string.h>
+ #include <assert.h>
+-#include <event.h>
++#include <event2/event.h>
++#include <event2/event_compat.h>
++#include <event2/event_struct.h>
+ #include "log.h"
+ #include "main.h"
+ #include "utils.h"
+diff -ruN redsocks/Makefile redsocks.new/Makefile
+--- redsocks/Makefile	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/Makefile	2021-07-30 15:07:33.175337543 -0700
+@@ -1,3 +1,8 @@
++CURR_DIR := $(shell pwd)
++BUILD_DIR:=$(subst /userspace, /userspace,$(CURR_DIR))
++BUILD_DIR:=$(word 1, $(BUILD_DIR))
++
++
+ -include make.conf
+ OBJS := parser.o main.o redsocks.o log.o http-connect.o socks4.o socks5.o http-relay.o base.o base64.o md5.o http-auth.o utils.o redudp.o dnstc.o gen/version.o
+ ifeq ($(DBG_BUILD),1)
+@@ -9,6 +14,9 @@
+ OUT := redsocks
+ VERSION := 0.5
+ 
++CFLAGS += -I $(BCM_FSBUILD_DIR)/public/include $(BCM_LD_FLAGS)
++LDFLAGS += -L $(BCM_FSBUILD_DIR)/public/lib $(BCM_LD_FLAGS)
++
+ LIBS := -levent_core
+ ifeq ($(DBG_BUILD),1)
+ # -levent_extra is required only for `http` and `debug`
+@@ -20,6 +28,8 @@
+ 
+ all: $(OUT)
+ 
++include $(BUILD_DIR)/make.common
++
+ .PHONY: all clean distclean test
+ 
+ tags: *.c *.h
+diff -ruN redsocks/parser.c redsocks.new/parser.c
+--- redsocks/parser.c	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/parser.c	2021-07-30 15:44:11.237708828 -0700
+@@ -26,6 +26,7 @@
+ #include <arpa/inet.h>
+ #include <netdb.h>
+ #include <errno.h>
++#include <event2/buffer.h>
+ #include "utils.h"
+ #include "parser.h"
+ #include "log.h"
+Binary files redsocks/redsocks and redsocks.new/redsocks differ
+diff -ruN redsocks/redsocks.c redsocks.new/redsocks.c
+--- redsocks/redsocks.c	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/redsocks.c	2021-07-30 16:19:17.437350084 -0700
+@@ -28,7 +28,12 @@
+ #include <errno.h>
+ #include <assert.h>
+ #include <fcntl.h>
+-#include <event.h>
++#include <event2/event.h>
++#include <event2/event_compat.h>
++#include <event2/event_struct.h>
++#include <event2/buffer.h>
++#include <event2/bufferevent.h>
++#include <event2/bufferevent_struct.h>
+ #include "list.h"
+ #include "parser.h"
+ #include "log.h"
+diff -ruN redsocks/redsocks.h redsocks.new/redsocks.h
+--- redsocks/redsocks.h	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/redsocks.h	2021-07-30 16:22:24.253448371 -0700
+@@ -4,7 +4,10 @@
+ #include <sys/types.h>
+ #include <netinet/in.h>
+ #include <assert.h>
+-#include <event.h>
++#include <event2/event.h>
++#include <event2/event_struct.h>
++#include <event2/bufferevent.h>
++#include <event2/bufferevent_struct.h>
+ #include "list.h"
+ #include "parser.h"
+ 
+diff -ruN redsocks/redudp.c redsocks.new/redudp.c
+--- redsocks/redudp.c	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/redudp.c	2021-07-30 16:26:29.681605531 -0700
+@@ -24,6 +24,8 @@
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ #include <assert.h>
++#include <event2/event.h>
++#include <event2/event_compat.h>
+ 
+ #include "list.h"
+ #include "log.h"
+diff -ruN redsocks/utils.c redsocks.new/utils.c
+--- redsocks/utils.c	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/utils.c	2021-07-30 16:25:38.801570928 -0700
+@@ -22,6 +22,7 @@
+ #include <sys/socket.h>
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
++#include <event2/buffer.h>
+ #include "log.h"
+ #include "base.h"
+ #include "utils.h"
+diff -ruN redsocks/utils.h redsocks.new/utils.h
+--- redsocks/utils.h	2016-12-27 09:16:18.000000000 -0800
++++ redsocks.new/utils.h	2021-07-30 16:24:00.973507176 -0700
+@@ -3,7 +3,9 @@
+ 
+ #include <stddef.h>
+ #include <time.h>
+-#include <event.h>
++#include <event2/bufferevent.h>
++#include <event2/bufferevent_compat.h>
++#include <event2/event.h>
+ 
+ struct sockaddr_in;
+ 

@@ -1,0 +1,221 @@
+diff -Naur nftables-1.0.2.orig/examples/Makefile.in nftables-1.0.2/examples/Makefile.in
+--- nftables-1.0.2.orig/examples/Makefile.in	2022-02-21 21:15:45.049482323 +0800
++++ nftables-1.0.2/examples/Makefile.in	2022-03-14 14:58:41.867227174 +0800
+@@ -127,7 +127,7 @@
+ am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
+ am__v_at_0 = @
+ am__v_at_1 = 
+-DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
++DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/include
+ depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
+ am__maybe_remake_depfiles = depfiles
+ am__depfiles_remade = ./$(DEPDIR)/nft-buffer.Po \
+diff -Naur nftables-1.0.2.orig/include/statement.h nftables-1.0.2/include/statement.h
+--- nftables-1.0.2.orig/include/statement.h	2022-02-21 21:15:38.619489114 +0800
++++ nftables-1.0.2/include/statement.h	2022-03-14 14:59:08.419252506 +0800
+@@ -118,6 +118,13 @@
+ 
+ extern struct stmt *reject_stmt_alloc(const struct location *loc);
+ 
++struct bcm_ext_stmt {
++	const char *	text;
++};
++
++extern struct stmt *bcm_ext_stmt_alloc(const struct location *loc);
++
++
+ enum nft_nat_etypes {
+ 	__NFT_NAT_SNAT = NFT_NAT_SNAT,
+ 	__NFT_NAT_DNAT = NFT_NAT_DNAT,
+@@ -281,6 +288,7 @@
+  * @STMT_LIMIT:		limit statement
+  * @STMT_LOG:		log statement
+  * @STMT_REJECT:	REJECT statement
++ * @STMT_BCM_EXT:	bcm_ext statement
+  * @STMT_NAT:		NAT statement
+  * @STMT_QUEUE:		QUEUE statement
+  * @STMT_CT:		conntrack statement
+@@ -309,6 +317,7 @@
+ 	STMT_LIMIT,
+ 	STMT_LOG,
+ 	STMT_REJECT,
++	STMT_BCM_EXT,
+ 	STMT_NAT,
+ 	STMT_TPROXY,
+ 	STMT_QUEUE,
+@@ -378,6 +387,7 @@
+ 		struct log_stmt		log;
+ 		struct limit_stmt	limit;
+ 		struct reject_stmt	reject;
++		struct bcm_ext_stmt	bcm_ext;
+ 		struct nat_stmt		nat;
+ 		struct tproxy_stmt	tproxy;
+ 		struct queue_stmt	queue;
+diff -Naur nftables-1.0.2.orig/src/evaluate.c nftables-1.0.2/src/evaluate.c
+--- nftables-1.0.2.orig/src/evaluate.c	2022-02-21 21:15:38.619489114 +0800
++++ nftables-1.0.2/src/evaluate.c	2022-03-14 14:59:08.423252509 +0800
+@@ -3837,6 +3837,8 @@
+ 		return stmt_evaluate_log(ctx, stmt);
+ 	case STMT_REJECT:
+ 		return stmt_evaluate_reject(ctx, stmt);
++	case STMT_BCM_EXT:
++		return 0;
+ 	case STMT_NAT:
+ 		return stmt_evaluate_nat(ctx, stmt);
+ 	case STMT_TPROXY:
+diff -Naur nftables-1.0.2.orig/src/netlink_delinearize.c nftables-1.0.2/src/netlink_delinearize.c
+--- nftables-1.0.2.orig/src/netlink_delinearize.c	2022-02-21 21:15:38.629489102 +0800
++++ nftables-1.0.2/src/netlink_delinearize.c	2022-03-14 14:59:08.423252509 +0800
+@@ -1066,6 +1066,16 @@
+ 	ctx->stmt = stmt;
+ }
+ 
++static void netlink_parse_bcm_ext(struct netlink_parse_ctx *ctx,
++				 const struct location *loc,
++				 const struct nftnl_expr *expr)
++{
++	struct stmt *stmt;
++	stmt = bcm_ext_stmt_alloc(loc);
++	stmt->bcm_ext.text = xstrdup(nftnl_expr_get_str(expr, NFTNL_EXPR_BCM_EXT_TEXT));
++	ctx->stmt = stmt;
++}
++
+ static bool is_nat_addr_map(const struct expr *addr, uint8_t family,
+ 			    struct stmt *stmt)
+ {
+@@ -1779,6 +1789,7 @@
+ 	{ .name = "limit",	.parse = netlink_parse_limit },
+ 	{ .name = "range",	.parse = netlink_parse_range },
+ 	{ .name = "reject",	.parse = netlink_parse_reject },
++	{ .name = "bcm_ext",	.parse = netlink_parse_bcm_ext },
+ 	{ .name = "nat",	.parse = netlink_parse_nat },
+ 	{ .name = "tproxy",	.parse = netlink_parse_tproxy },
+ 	{ .name = "notrack",	.parse = netlink_parse_notrack },
+diff -Naur nftables-1.0.2.orig/src/netlink_linearize.c nftables-1.0.2/src/netlink_linearize.c
+--- nftables-1.0.2.orig/src/netlink_linearize.c	2022-02-21 21:15:38.629489102 +0800
++++ nftables-1.0.2/src/netlink_linearize.c	2022-03-14 14:59:08.423252509 +0800
+@@ -1098,6 +1098,20 @@
+ 	nft_rule_add_expr(ctx, nle, &stmt->location);
+ }
+ 
++static void netlink_gen_bcm_ext_stmt(struct netlink_linearize_ctx *ctx,
++				    const struct stmt *stmt)
++{
++	struct nftnl_expr *nle;
++
++	nle = alloc_nft_expr("bcm_ext");
++
++	if (stmt->bcm_ext.text != NULL) {
++		nftnl_expr_set_str(nle, NFTNL_EXPR_BCM_EXT_TEXT, stmt->bcm_ext.text);
++	}
++	nftnl_rule_add_expr(ctx->nlr, nle);
++}
++
++
+ static unsigned int nat_addrlen(uint8_t family)
+ {
+ 	switch (family) {
+@@ -1583,6 +1597,8 @@
+ 		return netlink_gen_log_stmt(ctx, stmt);
+ 	case STMT_REJECT:
+ 		return netlink_gen_reject_stmt(ctx, stmt);
++	case STMT_BCM_EXT:
++		return netlink_gen_bcm_ext_stmt(ctx, stmt);
+ 	case STMT_NAT:
+ 		return netlink_gen_nat_stmt(ctx, stmt);
+ 	case STMT_TPROXY:
+diff -Naur nftables-1.0.2.orig/src/parser_bison.y nftables-1.0.2/src/parser_bison.y
+--- nftables-1.0.2.orig/src/parser_bison.y	2022-02-21 21:15:38.629489102 +0800
++++ nftables-1.0.2/src/parser_bison.y	2022-03-14 14:59:08.423252509 +0800
+@@ -576,6 +576,8 @@
+ %token FULLY_RANDOM		"fully-random"
+ %token PERSISTENT		"persistent"
+ 
++%token BCM_EXT			"bcm_ext"
++
+ %token QUEUE			"queue"
+ %token QUEUENUM			"num"
+ %token BYPASS			"bypass"
+@@ -731,6 +733,9 @@
+ %type <stmt>			meter_stmt meter_stmt_alloc flow_stmt_legacy_alloc
+ %destructor { stmt_free($$); }	meter_stmt meter_stmt_alloc flow_stmt_legacy_alloc
+ 
++%type <stmt>			bcm_ext_stmt bcm_ext_stmt_alloc
++%destructor { stmt_free($$); }	bcm_ext_stmt bcm_ext_stmt_alloc
++
+ %type <expr>			symbol_expr verdict_expr integer_expr variable_expr chain_expr policy_expr
+ %destructor { expr_free($$); }	symbol_expr verdict_expr integer_expr variable_expr chain_expr policy_expr
+ %type <expr>			primary_expr shift_expr and_expr typeof_expr typeof_data_expr
+@@ -2816,6 +2821,7 @@
+			|	meta_stmt
+			|	log_stmt	close_scope_log
+			|	reject_stmt	close_scope_reject
++			|	bcm_ext_stmt
+			|	nat_stmt	close_scope_nat
+			|	tproxy_stmt	close_scope_tproxy
+			|	queue_stmt
+@@ -3386,6 +3392,21 @@
+ 			}
+ 			;
+ 
++bcm_ext_stmt		:	bcm_ext_stmt_alloc	bcm_ext_opts
++			;
++
++bcm_ext_stmt_alloc	:	BCM_EXT
++			{
++				$$ = bcm_ext_stmt_alloc(&@$);
++			}
++			;
++
++bcm_ext_opts		:	string
++			{
++				$<stmt>0->bcm_ext.text = $1;
++			}
++			;
++
+ nat_stmt		:	nat_stmt_alloc	nat_stmt_args
+ 			;
+ 
+diff -Naur nftables-1.0.2.orig/src/scanner.l nftables-1.0.2/src/scanner.l
+--- nftables-1.0.2.orig/src/scanner.l	2022-02-21 21:15:38.629489102 +0800
++++ nftables-1.0.2/src/scanner.l	2022-03-14 14:59:08.423252509 +0800
+@@ -414,6 +414,8 @@
+        "port"                  { return PORT; }
+ }
+
++"bcm_ext"              { return BCM_EXT; }
++
+ <SCANSTATE_AT>{
+        "ll"                    { return LL_HDR; }
+        "nh"                    { return NETWORK_HDR; }
+diff -Naur nftables-1.0.2.orig/src/statement.c nftables-1.0.2/src/statement.c
+--- nftables-1.0.2.orig/src/statement.c	2022-02-21 21:15:38.629489102 +0800
++++ nftables-1.0.2/src/statement.c	2022-03-14 14:59:08.419252506 +0800
+@@ -1021,3 +1021,27 @@
+ {
+ 	return stmt_alloc(loc, &synproxy_stmt_ops);
+ }
++
++static void bcm_ext_stmt_print(const struct stmt *stmt)
++{
++	printf("bcm_ext \"%s\"", stmt->bcm_ext.text);
++}
++
++static void bcm_ext_stmt_destroy(struct stmt *stmt)
++{
++	xfree(stmt->bcm_ext.text);
++}
++
++
++static const struct stmt_ops bcm_ext_stmt_ops = {
++	.type		= STMT_BCM_EXT,
++	.name		= "bcm_ext",
++	.print		= bcm_ext_stmt_print,
++	.destroy	= bcm_ext_stmt_destroy,
++};
++
++struct stmt *bcm_ext_stmt_alloc(const struct location *loc)
++{
++	return stmt_alloc(loc, &bcm_ext_stmt_ops);
++}
++

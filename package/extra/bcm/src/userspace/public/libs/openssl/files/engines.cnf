@@ -1,0 +1,14 @@
+#
+# THIS FILE WILL BE EDITED BY BRCM OPENSSL MAKEFILE.
+#
+
+# This file is loaded in openssl.cnf file.
+# Each uncommented engine will be configured according to it's own
+# configuration file in /etc/ssl/engines.cnf.d
+
+[engines]
+#devcrypto=devcrypto
+#afalg=afalg
+#padlock=padlock
+#gost=gost
+#pkcs11=pkcs11

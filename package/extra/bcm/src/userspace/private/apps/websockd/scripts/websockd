@@ -1,0 +1,15 @@
+#!/bin/sh /etc/rc.common
+
+START=98
+STOP=10
+
+start() {
+    echo "start websockd"
+    /bin/websockd -v 0 &
+}
+
+stop() {
+    echo "stop websockd"
+    killall websockd
+}
+

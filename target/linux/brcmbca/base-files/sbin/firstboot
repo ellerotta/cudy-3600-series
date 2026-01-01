@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# restore default user_nvram, and must before jffs2resete
+cp -f /etc/wlan/user_nvram.setting  /data/.user_nvram.setting
+
+/sbin/jffs2reset -y
+
+# data partion BDK component files and wifi setting
+rm -f /data/psi*
+# nvram will be restored by /etc/wlan/nvram/BOARDID.nvm on boot
+rm -f /data/.kernel_nvram.setting

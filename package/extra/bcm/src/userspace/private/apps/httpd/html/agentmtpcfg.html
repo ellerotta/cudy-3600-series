@@ -1,0 +1,311 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Agent MTP Configuraton</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'agentmtpcfg.cgi?';
+        var num = 0;
+
+        // validate STOMP
+        if (document.getElementById('protocol').value == 'STOMP') {
+          if (document.getElementById('stompRef').value == 'cpe-stomp-0') {
+            alert('STOMP reference cannot be empty.');
+            return;
+          }
+        }
+
+        // validate MQTT
+        if (document.getElementById('protocol').value == 'MQTT') {
+          // validate reference
+          if (document.getElementById('mqttReference').value == 'cpe-mqtt-client-0') {
+            alert('MQTT reference cannot be empty.');
+            return;
+          }
+          // validate publish QoS
+          if (isNaN(document.getElementById('mqttQoS').value)) {
+            alert('MQTT publish QoS is not a number.');
+            return;
+          }
+          num = parseInt(document.getElementById('mqttQoS').value);
+          if (num < 0 || num > 2)
+          {
+            alert('MQTT publish QoS ' + num + ' is out of range [1-2].');
+            return;
+          }
+        }
+        // validate WebSocket
+        if (document.getElementById('protocol').value == 'WebSocket') {
+          if (document.getElementById('websocketInterfaces').value == '') {
+            alert('WebSocket interfaces cannot be empty.');
+            return;
+          }
+          if (document.getElementById('websocketPath').value == '') {
+            alert('WebSocket path cannot be empty.');
+            return;
+          }
+          num = parseInt(document.getElementById('websocketPort').value);
+          if (num < 1 || num > 65535) {
+            alert('WebSocket port ' + num + ' is out of range [1-65535].');
+            return;
+          }
+        }
+
+        // Enable MTP
+        if (document.getElementById('enableMtp-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        // Alias
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            val += info[1] + '|';
+          } else
+            val += '|';
+        } else
+          val += '|';
+        // Protocol
+        val += document.getElementById('protocol').value + '|';
+
+        // Stomp Reference
+        val += document.getElementById('stompRef').value + '|';
+        // Stomp Destination
+        val += document.getElementById('stompDst').value + '|';
+        // MQTT Reference
+        val += document.getElementById('mqttReference').value + '|';
+        // MQTT Response Topic Configured
+        val += document.getElementById('mqttTopicConfigured').value + '|';
+		// MQTT Publish QoS
+        val += document.getElementById('mqttQoS').value + '|';
+		  // WebSocket Interfaces
+        val += document.getElementById('websocketInterfaces').value + '|';
+		  // WebSocket Port
+        val += document.getElementById('websocketPort').value + '|';
+		  // WebSocket Path
+        val += document.getElementById('websocketPath').value + '|';
+		  // WebSocket EnableEncryption
+        if (document.getElementById('wsenableEncrypt-1').checked)
+          val += '1';
+        else
+          val += '0';
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function changeProtocol(val) {
+        var stomp = document.getElementById('stomp');
+        var mqtt = document.getElementById('mqtt');
+        var websocket = document.getElementById('websocket');
+
+        if (val === 'STOMP') {
+          stomp.style.display = 'block';
+          mqtt.style.display = 'none';
+          websocket.style.display = 'none';
+        } else if (val === 'MQTT') {
+          mqtt.style.display = 'block';
+          stomp.style.display = 'none';
+          websocket.style.display = 'none';
+        } else if (val === 'WebSocket') {
+          websocket.style.display = 'block';
+          stomp.style.display = 'none';
+          mqtt.style.display = 'none';
+        }
+      }
+
+      function bodyLoad() {
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            // Enable Connection
+            if (info[0] == 'Yes')
+              document.getElementById('enableMtp-1').checked = true;
+            else
+              document.getElementById('enableMtp-0').checked = true;
+            // Protocol
+            var proto = document.getElementById('protocol');
+
+            // only handle STOPM, MQTT, and WEBSOCKET protocol
+            if (info[2] == 'STOMP') {
+              // Protocol
+              proto.value = 'STOMP';
+              proto.onchange('STOMP');
+            } else if (info[2] == 'MQTT') {
+              // Protocol
+              proto.value = 'MQTT';
+              proto.onchange('MQTT');
+            }
+            else if (info[2] == 'WebSocket') {
+              // Protocol
+              proto.value = 'WebSocket';
+              proto.onchange('WebSocket');
+            }
+
+            // STOMP Reference
+            document.getElementById('stompRef').value = info[3];
+            // STOMP Destination
+            document.getElementById('stompDst').value = info[4];
+            // STOMP Destination From Server
+            document.getElementById('stompDstFrmSrv').value = info[5];
+            // MQTT Reference
+            document.getElementById('mqttReference').value = info[6];
+            // MQTT Response Topic Configured
+            document.getElementById('mqttTopicConfigured').value = info[7];
+            // MQTT Publish QoS
+            document.getElementById('mqttQoS').value = info[8];
+            // MQTT Response Topic Discovered
+            document.getElementById('mqttTopicDiscovered').value = info[9];
+            // WebSocket Interfaces
+            document.getElementById('websocketInterfaces').value = info[10];
+            // WebSocket Port
+            document.getElementById('websocketPort').value = info[11];
+            // WebSocket Path
+            document.getElementById('websocketPath').value = info[12];
+            // Websocket EnableEncryption
+            if (info[13] == 'Yes')
+              document.getElementById('wsenableEncrypt-1').checked = true;
+            else
+              document.getElementById('wsenableEncrypt-0').checked = true;
+          }
+
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          var proto = document.getElementById('protocol');
+
+          // Protocol
+          proto.value = 'STOMP';
+          proto.onchange('STOMP');
+
+          // Enable Connection
+          document.getElementById('enableMtp-1').checked = true;
+          document.getElementById('wsenableEncrypt-1').checked = true;
+          document.getElementById('websocketPort').value = '5683';
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>Agent MTP Configuration</h3><br>
+    <div id='mtp'><center>
+      <table id='tblMtpCfg' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd'>Enable MTP</td>
+            <td><input name='enableMtp' id='enableMtp-0' type='radio'>  Disable</td>
+            <td><input name='enableMtp' id='enableMtp-1' type='radio'>  Enable</td>
+          </tr>
+          <tr height='25'>
+          </tr>
+          <tr>
+            <td class='hd'>Protocol</td>
+            <td colspan='2'>
+                <select id='protocol' onchange='changeProtocol(this.value)'>
+                  <option value='STOMP' selected='selected'>STOMP</option>
+                  <option value='MQTT'>MQTT</option>
+                  <option value='WebSocket'>WebSocket</option>
+                </select>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><br>
+    <div id='stomp'><center>
+      <table id='tblStompCfg' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd'>STOMP Reference</td>
+            <td width='250'>
+                <select id='stompRef' required>
+                  <option value=''></option>
+<%ejGetOther(uspGetStompConnFullPathList)%>
+                </select>
+            </td>
+          </tr>
+          <tr>
+            <td class='hd'>Destination</td>
+            <td><input type='text' id='stompDst'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Destination From Server</td>
+            <td><input type='text' id='stompDstFrmSrv' disabled></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div id='mqtt'><center>
+      <table id='tblMqttCfg' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd'>MQTT Reference</td>
+            <td width='250'>
+                <select id='mqttReference' required>
+                  <option value=''></option>
+<%ejGetOther(uspGetMqttClientFullPathList)%>
+                </select>
+            </td>
+          </tr>
+          <tr>
+            <td class='hd'>Publish QoS [0-2]</td>
+            <td><input type='text' id='mqttQoS'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Configured Response Topic</td>
+            <td><input type='text' id='mqttTopicConfigured'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Discovered Response Topic</td>
+            <td><input type='text' id='mqttTopicDiscovered' disabled></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div id='websocket'><center>
+      <table id='tblWebSocketCfg' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd'>Enable Encryption</td>
+            <td><input name='wsenableEncrypt' id='wsenableEncrypt-0' type='radio'>  Disable</td>
+            <td><input name='wsenableEncrypt' id='wsenableEncrypt-1' type='radio'>  Enable</td>
+          </tr>
+          <tr height='25'>
+          </tr>
+          <tr>
+            <td class='hd'>Interfaces</td>
+            <td colspan='2'><input type='text' id='websocketInterfaces'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Port</td>
+            <td colspan='2'><input type='text' id='websocketPort'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Path</td>
+            <td colspan='2'><input type='text' id='websocketPath'></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+  </form>
+  </body>
+</html>

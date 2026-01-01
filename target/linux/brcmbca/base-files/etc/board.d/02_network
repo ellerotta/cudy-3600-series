@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# Copyright (C) 2019 OpenWrt.org
+#
+
+. /lib/functions/uci-defaults.sh
+. /lib/functions/system.sh
+
+board_config_update
+
+# invoke API from jshn.sh check network
+json_is_a network object && exit 0
+
+ethernetLanPorts="$(db -q get hw.board.ethernetLanPorts)"
+ethernetWanPort="$(db -q get hw.board.ethernetWanPort)"
+
+[ -n "$ethernetLanPorts" ] && ucidef_set_interface_lan "$ethernetLanPorts"
+[ -n "$ethernetWanPort" ] && ucidef_set_interface_wan "$ethernetWanPort"
+
+board_config_flush
+
+exit 0

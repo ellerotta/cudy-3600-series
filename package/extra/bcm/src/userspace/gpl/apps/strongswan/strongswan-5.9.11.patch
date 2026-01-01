@@ -1,0 +1,233 @@
+--- ori_strongswan-5.9.11/src/starter/ipsec.conf	2023-03-28 05:00:49.000000000 +0800
++++ strongswan-5.9.11/src/starter/ipsec.conf	2023-08-15 13:34:16.520215902 +0800
+@@ -18,6 +18,7 @@
+ #      rightsubnet=10.2.0.0/16
+ #      rightcert=peerCert.der
+ #      auto=start
++include /var/ipsec/ipsec.conf
+ 
+ #conn sample-with-ca-cert
+ #      leftsubnet=10.1.0.0/16
+
+
+--- ori_strongswan-5.9.11/src/starter/ipsec.secrets	2023-03-28 05:00:49.000000000 +0800
++++ strongswan-5.9.11/src/starter/ipsec.secrets	2023-08-15 13:36:37.032214668 +0800
+@@ -1 +1,2 @@
+ # ipsec.secrets - strongSwan IPsec secrets file
++include /var/ipsec/ipsec.secrets
+
+
+--- ori_strongswan-5.9.11/conf/strongswan.conf	2023-03-28 05:00:49.000000000 +0800
++++ strongswan-5.9.11/conf/strongswan.conf	2023-08-15 13:37:48.728214038 +0800
+@@ -12,3 +12,4 @@
+ }
+ 
+ include strongswan.d/*.conf
++include /var/ipsec/strongswan.conf
+
+
+--- ori_strongswan-5.9.11/src/libstrongswan/utils/utils/memory.h	2023-03-28 05:00:49.000000000 +0800
++++ strongswan-5.9.11/src/libstrongswan/utils/utils/memory.h	2023-08-15 13:40:33.560212591 +0800
+@@ -27,6 +27,7 @@
+ #include <string.h>
+ #endif
+ 
++#include <stdint.h>
+ /**
+  * Helper function that compares two binary blobs for equality
+  */
+
+--- ori_strongswan-5.9.11/src/libcharon/plugins/kernel_netlink/kernel_netlink_ipsec.c	2023-03-28 05:00:49.000000000 +0800
++++ strongswan-5.9.11/src/libcharon/plugins/kernel_netlink/kernel_netlink_ipsec.c	2023-08-28 13:41:55.068211875 +0800
+@@ -50,6 +50,10 @@
+ #include <linux/rtnetlink.h>
+ #include <linux/xfrm.h>
+ #include <linux/udp.h>
++#include <linux/kernel.h>
++#ifndef __KERNEL_DIV_ROUND_UP
++#define __KERNEL_DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
++#endif
+ #include <linux/ethtool.h>
+ #include <linux/sockios.h>
+ #include <net/if.h>
+ 
+--- ori_strongswan-5.9.11/src/ipsec/_ipsec.in	2023-03-28 05:00:49.000000000 +0800
++++ strongswan-5.9.11/src/ipsec/_ipsec.in	2023-08-15 13:41:55.068211875 +0800
+@@ -316,8 +316,8 @@
+ 	# fall through
+ 	;;
+ version|--version)
+-	printf "$OS_NAME $IPSEC_NAME $IPSEC_VERSION\n"
+-	printf "$IPSEC_DISTRO\n"
++	echo "$OS_NAME $IPSEC_NAME $IPSEC_VERSION"
++	echo "$IPSEC_DISTRO"
+ 	exit 0
+ 	;;
+ --*)
+
+
+--- ori_strongswan-5.9.11/src/include/linux/pfkeyv2.h	2023-03-28 05:00:49.000000000 +0800
++++ strongswan-5.9.11/src/include/linux/pfkeyv2.h	2023-08-15 13:44:06.812210718 +0800
+@@ -235,6 +235,14 @@
+ } __attribute__((packed));
+ /* sizeof(struct sadb_x_kmaddress) == 8 */
+ 
++/* Additional large replay window support */
++struct sadb_x_sa_replay {
++	uint16_t sadb_x_sa_replay_len;
++	uint16_t sadb_x_sa_replay_exttype;
++	uint32_t sadb_x_sa_replay_replay;	/* in packets */
++}__attribute__((packed));
++/* sizeof(struct sadb_x_sa_replay) == 8 */
++
+ /* Message types */
+ #define SADB_RESERVED		0
+ #define SADB_GETSPI		1
+@@ -269,6 +277,8 @@
+ #define SADB_SAFLAGS_DECAP_DSCP	0x40000000
+ #define SADB_SAFLAGS_NOECN	0x80000000
+ 
++#define SADB_X_SAFLAGS_ESN      0x400
++
+ /* Security Association states */
+ #define SADB_SASTATE_LARVAL	0
+ #define SADB_SASTATE_MATURE	1
+@@ -358,7 +368,9 @@
+ #define SADB_X_EXT_SEC_CTX		24
+ /* Used with MIGRATE to pass @ to IKE for negotiation */
+ #define SADB_X_EXT_KMADDRESS		25
+-#define SADB_EXT_MAX			25
++#define SADB_X_EXT_FILTER		26
++#define SADB_X_EXT_SA_REPLAY            27
++#define SADB_EXT_MAX			27
+ 
+ /* Identity Extension values */
+ #define SADB_IDENTTYPE_RESERVED	0
+
+
+--- ori_strongswan-5.9.11/src/libcharon/plugins/kernel_pfkey/kernel_pfkey_ipsec.c	2023-06-08 18:35:17.000000000 +0800
++++ strongswan-5.9.11/src/libcharon/plugins/kernel_pfkey/kernel_pfkey_ipsec.c	2023-08-15 13:46:44.172209336 +0800
+@@ -758,6 +758,8 @@
+ 	"SADB_X_EXT_NAT_T_OA",
+ 	"SADB_X_EXT_SEC_CTX",
+ 	"SADB_X_EXT_KMADDRESS",
++	"SADB_X_EXT_FILTER",
++	"SADB_X_EXT_SA_REPLAY",	
+ #else
+ 	"SADB_X_EXT_NAT_T_OAI",
+ 	"SADB_X_EXT_NAT_T_OAR",
+@@ -1832,8 +1834,14 @@
+ 			sa->sadb_sa_replay = min((data->replay_window + 7) / 8, UINT8_MAX);
+ #endif
+ 		}
++		else
++		{
++			data->replay_window = 0;
++		}
+ 		if (data->esn)
+ 		{
++			if (!data->inbound)
++				data->replay_window = 1;
+ #ifdef SADB_X_SAFLAGS_ESN
+ 			DBG2(DBG_KNL, "  using extended sequence numbers (ESN)");
+ 			sa->sadb_sa_flags |= SADB_X_SAFLAGS_ESN;
+@@ -1850,7 +1858,7 @@
+ 	PFKEY_EXT_ADD(msg, sa);
+ 
+ #ifdef SADB_X_EXT_SA_REPLAY
+-	if (data->inbound)
++	if (data->replay_window)
+ 	{
+ 		struct sadb_x_sa_replay *repl;
+ 
+@@ -1912,6 +1920,8 @@
+ 
+ 	if (data->int_alg != AUTH_UNDEFINED)
+ 	{
++		uint16_t trunc_len = 0;
++		
+ 		if (!sa->sadb_sa_auth)
+ 		{
+ 			DBG1(DBG_KNL, "algorithm %N not supported by kernel!",
+@@ -1920,11 +1930,34 @@
+ 		}
+ 		DBG2(DBG_KNL, "  using integrity algorithm %N with key size %d",
+ 			 integrity_algorithm_names, data->int_alg, data->int_key.len * 8);
+-
++		
++		switch (data->int_alg)
++		{
++			case AUTH_HMAC_MD5_128:
++			case AUTH_HMAC_SHA2_256_128:
++				trunc_len = 128;
++				break;
++			case AUTH_HMAC_SHA1_160:
++				trunc_len = 160;
++				break;
++			case AUTH_HMAC_SHA2_256_256:
++				trunc_len = 256;
++				break;
++			case AUTH_HMAC_SHA2_384_384:
++				trunc_len = 384;
++				break;
++			case AUTH_HMAC_SHA2_512_512:
++				trunc_len = 512;
++				break;
++			default:
++				break;
++		}
++		
+ 		key = (struct sadb_key*)PFKEY_EXT_ADD_NEXT(msg);
+ 		key->sadb_key_exttype = SADB_EXT_KEY_AUTH;
+ 		key->sadb_key_bits = data->int_key.len * 8;
+ 		key->sadb_key_len = PFKEY_LEN(sizeof(struct sadb_key) + data->int_key.len);
++		key->sadb_key_reserved = trunc_len;
+ 		memcpy(key + 1, data->int_key.ptr, data->int_key.len);
+ 
+ 		PFKEY_EXT_ADD(msg, key);
+
+--- ori_strongswan-5.9.11/configure	2023-06-12 13:50:46.000000000 +0800
++++ strongswan-5.9.11/configure	2023-08-15 13:49:42.056207773 +0800
+@@ -9628,34 +9628,6 @@
+   fi
+ fi
+ ac_prog_cc_stdc=no
+-if test x$ac_prog_cc_stdc = xno
+-then :
+-  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $CC option to enable C11 features" >&5
+-printf %s "checking for $CC option to enable C11 features... " >&6; }
+-if test ${ac_cv_prog_cc_c11+y}
+-then :
+-  printf %s "(cached) " >&6
+-else $as_nop
+-  ac_cv_prog_cc_c11=no
+-ac_save_CC=$CC
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-$ac_c_conftest_c11_program
+-_ACEOF
+-for ac_arg in '' -std=gnu11
+-do
+-  CC="$ac_save_CC $ac_arg"
+-  if ac_fn_c_try_compile "$LINENO"
+-then :
+-  ac_cv_prog_cc_c11=$ac_arg
+-fi
+-rm -f core conftest.err conftest.$ac_objext conftest.beam
+-  test "x$ac_cv_prog_cc_c11" != "xno" && break
+-done
+-rm -f conftest.$ac_ext
+-CC=$ac_save_CC
+-fi
+-
+ if test "x$ac_cv_prog_cc_c11" = xno
+ then :
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: unsupported" >&5
+@@ -9673,7 +9645,6 @@
+   ac_cv_prog_cc_stdc=$ac_cv_prog_cc_c11
+   ac_prog_cc_stdc=c11
+ fi
+-fi
+ if test x$ac_prog_cc_stdc = xno
+ then :
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $CC option to enable C99 features" >&5

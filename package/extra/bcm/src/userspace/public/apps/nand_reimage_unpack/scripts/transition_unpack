@@ -1,0 +1,24 @@
+#!/bin/bash
+
+DEFAULTS_MNT_DIR=/mnt/defaults
+DEFAULTS_MFG_NVRAM_DIR=$DEFAULTS_MNT_DIR/wl
+
+if [ "`cat /sys/class/ubi/ubi0_51/name`" = "transition" ]
+then
+  (
+    # ubi:defaults partition has already been created/mounted ahead of us.
+    echo "transition_unpack: MOUNT /mnt/defaults to rw to save nvram.nvm"
+    mount -t ubifs -oremount,rw ubi:defaults $DEFAULTS_MNT_DIR
+    mkdir -p $DEFAULTS_MFG_NVRAM_DIR
+
+    cd /
+    cat /dev/ubi0_51 | transition_unpacker
+    ubirmvol /dev/ubi0 -N transition 
+
+    echo "transition_unpack: MOUNT /mnt/defaults back to ro"
+    mount -t ubifs -oremount,ro ubi:defaults $DEFAULTS_MNT_DIR
+
+  )
+fi
+
+

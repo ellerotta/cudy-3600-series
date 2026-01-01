@@ -1,0 +1,951 @@
+diff -rupN orig_iproute2-6.0.0/configure iproute2-6.0.0/configure
+--- orig_iproute2-6.0.0/configure	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/configure	2022-10-24 15:38:39.769801565 +0800
+@@ -611,29 +611,35 @@ check_setns
+ echo -n "libc has name_to_handle_at: "
+ check_name_to_handle_at
+ 
+-echo -n "SELinux support: "
+-check_selinux
+-
+-echo -n "libtirpc support: "
+-check_tirpc
++# brcm: no SELINUX
++#echo -n "SELinux support: "
++#check_selinux
++
++# brcm: no tripc
++#echo -n "libtirpc support: "
++#check_tirpc
+ 
+ echo -n "libbpf support: "
+ check_libbpf
+ 
+-echo -n "ELF support: "
+-check_elf
+-
+-echo -n "libmnl support: "
+-check_mnl
+-
+-echo -n "Berkeley DB: "
+-check_berkeley_db
++# brcm: no ELF
++#echo -n "ELF support: "
++#check_elf
++
++# brcm: no libmnl
++#echo -n "libmnl support: "
++#check_mnl
++
++# brcm: no berkeleyDB
++#echo -n "Berkeley DB: "
++#check_berkeley_db
+ 
+ echo -n "need for strlcpy: "
+ check_strlcpy
+ 
+-echo -n "libcap support: "
+-check_cap
++# brcm: we do not build a 64bit libcap, so don't link with it.
++#echo -n "libcap support: "
++#check_cap
+ 
+ echo >> $CONFIG
+ echo "%.o: %.c" >> $CONFIG
+diff -rupN orig_iproute2-6.0.0/include/uapi/linux/if.h iproute2-6.0.0/include/uapi/linux/if.h
+--- orig_iproute2-6.0.0/include/uapi/linux/if.h	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/include/uapi/linux/if.h	2022-10-24 15:38:39.769801565 +0800
+@@ -131,6 +131,11 @@ enum net_device_flags {
+ #define IFF_ECHO			IFF_ECHO
+ #endif /* __UAPI_DEF_IF_NET_DEVICE_FLAGS_LOWER_UP_DORMANT_ECHO */
+ 
++#ifdef BCM_HAVE_MPTCP
++#define IFF_NOMULTIPATH	0x80000		/* Disable for MPTCP 		*/
++#define IFF_MPBACKUP	0x100000	/* Use as backup path for MPTCP */
++#endif
++
+ #define IFF_VOLATILE	(IFF_LOOPBACK|IFF_POINTOPOINT|IFF_BROADCAST|IFF_ECHO|\
+ 		IFF_MASTER|IFF_SLAVE|IFF_RUNNING|IFF_LOWER_UP|IFF_DORMANT)
+ 
+diff -rupN orig_iproute2-6.0.0/include/uapi/linux/if_tunnel.h iproute2-6.0.0/include/uapi/linux/if_tunnel.h
+--- orig_iproute2-6.0.0/include/uapi/linux/if_tunnel.h	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/include/uapi/linux/if_tunnel.h	2022-10-24 15:38:39.769801565 +0800
+@@ -112,6 +112,7 @@ struct ip_tunnel_6rd {
+ 	__be32			relay_prefix;
+ 	__u16			prefixlen;
+ 	__u16			relay_prefixlen;
++	__be32			br_addr; // brcm
+ };
+ 
+ enum {
+diff -rupN orig_iproute2-6.0.0/include/uapi/linux/pkt_cls.h iproute2-6.0.0/include/uapi/linux/pkt_cls.h
+--- orig_iproute2-6.0.0/include/uapi/linux/pkt_cls.h	2022-10-24 14:42:37.354526877 +0800
++++ iproute2-6.0.0/include/uapi/linux/pkt_cls.h	2022-10-24 15:38:39.769801565 +0800
+@@ -588,6 +588,8 @@ enum {
+ 	TCA_FLOWER_KEY_HASH_MASK,	/* u32 */
+ 
+ 	TCA_FLOWER_KEY_NUM_OF_VLANS,    /* u8 */
++	TCA_FLOWER_KEY_VLAN_DEI,	/* u8   */
++	TCA_FLOWER_KEY_CVLAN_DEI,	/* u8   */
+ 
+ 	TCA_FLOWER_KEY_PPPOE_SID,	/* be16 */
+ 	TCA_FLOWER_KEY_PPP_PROTO,	/* be16 */
+diff -rupN orig_iproute2-6.0.0/include/uapi/linux/posix_types.h iproute2-6.0.0/include/uapi/linux/posix_types.h
+--- orig_iproute2-6.0.0/include/uapi/linux/posix_types.h	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/include/uapi/linux/posix_types.h	2022-10-24 15:38:39.769801565 +0800
+@@ -35,4 +35,43 @@ typedef int __kernel_mqd_t;
+ 
+ #include <asm/posix_types.h>
+ 
++#ifndef __kernel_long_t
++typedef long		__kernel_long_t;
++typedef unsigned long	__kernel_ulong_t;
++#endif
++
++#ifndef __kernel_ino_t
++typedef __kernel_ulong_t __kernel_ino_t;
++#endif
++
++#ifndef __kernel_mode_t
++typedef unsigned int	__kernel_mode_t;
++#endif
++
++#ifndef __kernel_pid_t
++typedef int		__kernel_pid_t;
++#endif
++
++#ifndef __kernel_ipc_pid_t
++typedef int		__kernel_ipc_pid_t;
++#endif
++
++#ifndef __kernel_uid_t
++typedef unsigned int	__kernel_uid_t;
++typedef unsigned int	__kernel_gid_t;
++#endif
++
++#ifndef __kernel_suseconds_t
++typedef __kernel_long_t		__kernel_suseconds_t;
++#endif
++
++#ifndef __kernel_daddr_t
++typedef int		__kernel_daddr_t;
++#endif
++
++#ifndef __kernel_uid32_t
++typedef unsigned int	__kernel_uid32_t;
++typedef unsigned int	__kernel_gid32_t;
++#endif
++
+ #endif /* _LINUX_POSIX_TYPES_H */
+diff -rupN orig_iproute2-6.0.0/include/uapi/linux/tc_act/tc_vlan.h iproute2-6.0.0/include/uapi/linux/tc_act/tc_vlan.h
+--- orig_iproute2-6.0.0/include/uapi/linux/tc_act/tc_vlan.h	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/include/uapi/linux/tc_act/tc_vlan.h	2022-10-24 15:38:39.777802318 +0800
+@@ -18,6 +18,10 @@
+ #define TCA_VLAN_ACT_MODIFY	3
+ #define TCA_VLAN_ACT_POP_ETH	4
+ #define TCA_VLAN_ACT_PUSH_ETH	5
++#define TCA_VLAN_ACT_POP_SAVE       106
++#define TCA_VLAN_ACT_PUSH_RESTORE   107
++
++#define TCA_VLAN_PRIORITY_COPY 0xff
+ 
+ struct tc_vlan {
+ 	tc_gen;
+diff -rupN orig_iproute2-6.0.0/ip/ipaddress.c iproute2-6.0.0/ip/ipaddress.c
+--- orig_iproute2-6.0.0/ip/ipaddress.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/ip/ipaddress.c	2022-10-24 15:38:39.773801942 +0800
+@@ -95,6 +95,10 @@ static void print_link_flags(FILE *fp, u
+ 	_PF(BROADCAST);
+ 	_PF(POINTOPOINT);
+ 	_PF(MULTICAST);
++#ifdef BCM_HAVE_MPTCP
++	_PF(NOMULTIPATH);
++	_PF(MPBACKUP);
++#endif
+ 	_PF(NOARP);
+ 	_PF(ALLMULTI);
+ 	_PF(PROMISC);
+diff -rupN orig_iproute2-6.0.0/ip/iplink.c iproute2-6.0.0/ip/iplink.c
+--- orig_iproute2-6.0.0/ip/iplink.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/ip/iplink.c	2022-10-24 15:38:39.773801942 +0800
+@@ -84,6 +84,9 @@ void iplink_usage(void)
+ 		"		[ dynamic { on | off } ]\n"
+ 		"		[ multicast { on | off } ]\n"
+ 		"		[ allmulticast { on | off } ]\n"
++#ifdef BCM_HAVE_MPTCP
++		"		[ multipath { on | off | backup } ]\n"
++#endif
+ 		"		[ promisc { on | off } ]\n"
+ 		"		[ trailers { on | off } ]\n"
+ 		"		[ carrier { on | off } ]\n"
+@@ -708,6 +711,20 @@ int iplink_parse(int argc, char **argv,
+ 				req->i.ifi_flags &= ~IFF_ALLMULTI;
+ 			else
+ 				return on_off("allmulticast", *argv);
++#ifdef BCM_HAVE_MPTCP
++		} else if (strcmp(*argv, "multipath") == 0) {
++			NEXT_ARG();
++			req->i.ifi_change |= IFF_NOMULTIPATH;
++			req->i.ifi_change |= IFF_MPBACKUP;
++			if (strcmp(*argv, "on") == 0) {
++				req->i.ifi_flags &= ~IFF_NOMULTIPATH;
++			} else if (strcmp(*argv, "off") == 0) {
++				req->i.ifi_flags |= IFF_NOMULTIPATH;
++			} else if (strcmp(*argv, "backup") == 0) {
++				req->i.ifi_flags |= IFF_MPBACKUP;
++			} else
++				return on_off("multipath", *argv);
++#endif
+ 		} else if (strcmp(*argv, "promisc") == 0) {
+ 			NEXT_ARG();
+ 			req->i.ifi_change |= IFF_PROMISC;
+@@ -1412,6 +1429,12 @@ static int do_set(int argc, char **argv)
+ 				flags &= ~IFF_ALLMULTI;
+ 			else
+ 				return on_off("allmulticast", *argv);
++#ifdef BCM_HAVE_MPTCP
++		} else if (strcmp(*argv, "multipath") == 0) {
++			fprintf(stderr, "Can't set multipath flags in IOCTL_COMPAT mode.");
++
++			return -1;
++#endif
+ 		} else if (strcmp(*argv, "promisc") == 0) {
+ 			NEXT_ARG();
+ 			mask |= IFF_PROMISC;
+diff -rupN orig_iproute2-6.0.0/ip/iplink_can.c iproute2-6.0.0/ip/iplink_can.c
+--- orig_iproute2-6.0.0/ip/iplink_can.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/ip/iplink_can.c	2022-10-24 15:38:39.773801942 +0800
+@@ -141,7 +141,7 @@ static int can_parse_opt(struct link_uti
+ 			if (get_u32(&bt.bitrate, *argv, 0))
+ 				invarg("invalid \"bitrate\" value\n", *argv);
+ 		} else if (matches(*argv, "sample-point") == 0) {
+-			float sp;
++			float sp=0.0f; // brcm
+ 
+ 			NEXT_ARG();
+ 			if (get_float(&sp, *argv))
+diff -rupN orig_iproute2-6.0.0/ip/iptunnel.c iproute2-6.0.0/ip/iptunnel.c
+--- orig_iproute2-6.0.0/ip/iptunnel.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/ip/iptunnel.c	2022-10-24 15:38:39.773801942 +0800
+@@ -503,6 +503,14 @@ static int do_6rd(int argc, char **argv)
+ 			cmd = SIOCADD6RD;
+ 			memcpy(&ip6rd.relay_prefix, prefix.data, 4);
+ 			ip6rd.relay_prefixlen = prefix.bitlen;
++// brcm: start
++		} else if (strcmp(*argv, "6rd-br_addr") == 0) {
++			NEXT_ARG();
++			if (get_prefix(&prefix, *argv, AF_INET))
++				invarg("invalid 6rd-br_addr\n", *argv);
++			cmd = SIOCADD6RD;
++			memcpy(&ip6rd.br_addr, prefix.data, 4);
++// brcm: end
+ 		} else if (strcmp(*argv, "6rd-reset") == 0) {
+ 			cmd = SIOCDEL6RD;
+ 		} else if (strcmp(*argv, "dev") == 0) {
+diff -rupN orig_iproute2-6.0.0/lib/Makefile iproute2-6.0.0/lib/Makefile
+--- orig_iproute2-6.0.0/lib/Makefile	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/lib/Makefile	2022-10-24 15:38:39.773801942 +0800
+@@ -1,7 +1,8 @@
+ # SPDX-License-Identifier: GPL-2.0
+ include ../config.mk
+ 
+-CFLAGS += -fPIC
++# brcm: comment out.
++# CFLAGS += -fPIC
+ 
+ UTILOBJ = utils.o utils_math.o rt_names.o ll_map.o ll_types.o ll_proto.o ll_addr.o \
+ 	inet_proto.o namespace.o json_writer.o json_print.o json_print_math.o \
+@@ -18,15 +19,16 @@ ifeq ($(HAVE_MNL),y)
+ NLOBJ += mnl_utils.o
+ endif
+ 
+-all: libnetlink.a libutil.a
++# brcm: rename libutil.a to libipr2util.a
++all: libnetlink.a libipr2util.a
+ 
+ libnetlink.a: $(NLOBJ)
+ 	$(QUIET_AR)$(AR) rcs $@ $^
+ 
+-libutil.a: $(UTILOBJ) $(ADDLIB)
++libipr2util.a: $(UTILOBJ) $(ADDLIB)
+ 	$(QUIET_AR)$(AR) rcs $@ $^
+ 
+ install:
+ 
+ clean:
+-	rm -f $(NLOBJ) $(UTILOBJ) $(ADDLIB) libnetlink.a libutil.a
++	rm -f $(NLOBJ) $(UTILOBJ) $(ADDLIB) libnetlink.a libipr2util.a
+diff -rupN orig_iproute2-6.0.0/lib/utils.c iproute2-6.0.0/lib/utils.c
+--- orig_iproute2-6.0.0/lib/utils.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/lib/utils.c	2022-10-24 15:38:39.773801942 +0800
+@@ -584,6 +584,7 @@ static int __get_addr_1(inet_prefix *add
+ 		return 0;
+ 	}
+ 
++#if 0 // brcm: not support
+ 	if (family == AF_MPLS) {
+ 		unsigned int maxlabels;
+ 		int i;
+@@ -604,6 +605,7 @@ static int __get_addr_1(inet_prefix *add
+ 		}
+ 		return 0;
+ 	}
++#endif
+ 
+ 	addr->family = AF_INET;
+ 	if (family != AF_UNSPEC && family != AF_INET)
+@@ -636,8 +638,10 @@ int af_bit_len(int af)
+ 		return 128;
+ 	case AF_INET:
+ 		return 32;
++#if 0 // brcm: not support
+ 	case AF_MPLS:
+ 		return 20;
++#endif
+ 	}
+ 
+ 	return 0;
+@@ -970,10 +974,12 @@ const char *rt_addr_n2a_r(int af, int le
+ 	case AF_INET:
+ 	case AF_INET6:
+ 		return inet_ntop(af, addr, buf, buflen);
++#if 0 // brcm: not support
+ 	case AF_MPLS:
+ 		return mpls_ntop(af, addr, buf, buflen);
+ 	case AF_PACKET:
+ 		return ll_addr_n2a(addr, len, ARPHRD_VOID, buf, buflen);
++#endif
+ 	case AF_BRIDGE:
+ 	{
+ 		const union {
+@@ -1013,10 +1019,12 @@ int read_family(const char *name)
+ 		family = AF_INET;
+ 	else if (strcmp(name, "inet6") == 0)
+ 		family = AF_INET6;
++#if 0 // brcm: not support
+ 	else if (strcmp(name, "link") == 0)
+ 		family = AF_PACKET;
+ 	else if (strcmp(name, "mpls") == 0)
+ 		family = AF_MPLS;
++#endif
+ 	else if (strcmp(name, "bridge") == 0)
+ 		family = AF_BRIDGE;
+ 	return family;
+@@ -1028,10 +1036,12 @@ const char *family_name(int family)
+ 		return "inet";
+ 	if (family == AF_INET6)
+ 		return "inet6";
++#if 0 // brcm: not support
+ 	if (family == AF_PACKET)
+ 		return "link";
+ 	if (family == AF_MPLS)
+ 		return "mpls";
++#endif
+ 	if (family == AF_BRIDGE)
+ 		return "bridge";
+ 	return "???";
+diff -rupN orig_iproute2-6.0.0/Makefile iproute2-6.0.0/Makefile
+--- iproute2-6.5.0/Makefile.orig	2023-09-07 00:26:52.000000000 +0800
++++ iproute2-6.5.0/Makefile	2023-09-11 10:03:29.822863409 +0800
+@@ -16,6 +16,9 @@
+ 
+ PREFIX?=/usr
+ SBINDIR?=/sbin
++# brcm: modify the LIBDIR, SBINDIR
++LIBDIR?=$(PREFIX)/lib
++SBINDIR=$(INSTALL_DIR)/bin
+ CONF_ETC_DIR?=/etc/iproute2
+ CONF_USR_DIR?=$(PREFIX)/lib/iproute2
+ NETNS_RUN_DIR?=/var/run/netns
+@@ -25,7 +28,9 @@
+ DOCDIR?=$(DATADIR)/doc/iproute2
+ MANDIR?=$(DATADIR)/man
+ ARPDDIR?=/var/lib/arpd
+-KERNEL_INCLUDE?=/usr/include
++# brcm: modify the KERNEL_INCLUDES and add LIBC_INCLUDE
++KERNEL_INCLUDES:=$(KERNEL_DIR)/include $(KERNEL_DIR)/arch/$(KARCH)/include
++LIBC_INCLUDE=$(KERNEL_DIR)/include/linux
+ BASH_COMPDIR?=$(DATADIR)/bash-completion/completions
+ 
+ # Path to db_185.h include
+@@ -50,7 +55,8 @@
+ ADDLIB+=rose_ntop.o
+ 
+ #options for mpls
+-ADDLIB+=mpls_ntop.o mpls_pton.o
++# brcm: not support mpls
++#ADDLIB+=mpls_ntop.o mpls_pton.o
+ 
+ #options for NETROM
+ ADDLIB+=netrom_ntop.o
+@@ -67,12 +73,16 @@
+ CFLAGS := $(WFLAGS) $(CCOPTS) -I../include -I../include/uapi $(DEFINES) $(CFLAGS)
+ YACCFLAGS = -d -t -v
+ 
++#brcm extra cflags
++CFLAGS += $(APPCFLAGS)
++
+ SUBDIRS=lib ip tc bridge misc netem genl man
+ ifeq ($(HAVE_MNL),y)
+ SUBDIRS += tipc devlink rdma dcb vdpa
+ endif
+ 
+-LIBNETLINK=../lib/libutil.a ../lib/libnetlink.a
++# brcm: modify the libutil.a to libipr2util.a
++LIBNETLINK=../lib/libipr2util.a ../lib/libnetlink.a
+ LDLIBS += $(LIBNETLINK)
+ 
+ all: config.mk
+diff -rupN orig_iproute2-6.0.0/man/man8/ip-link.8.in iproute2-6.0.0/man/man8/ip-link.8.in
+--- orig_iproute2-6.0.0/man/man8/ip-link.8.in	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/man/man8/ip-link.8.in	2022-10-24 15:38:39.773801942 +0800
+@@ -76,6 +76,10 @@ ip-link \- network device configuration
+ .br
+ .RB "[ " promisc " { " on " | " off " } ]"
+ .br
++#ifdef BCM_HAVE_MPTCP
++.BR multipath " { " on " | " off " | " backup " } |"
++.br
++#endif
+ .RB "[ " protodown " { " on " | " off " } ]"
+ .br
+ .RB "[ " protodown_reason
+@@ -2080,6 +2084,16 @@ flag on the device,
+ used by the Linux and exists for BSD compatibility.
+ 
+ .TP
++#ifdef BCM_HAVE_MPTCP
++.BR "multipath on ", " multipath off" or " multipath backup"
++change the
++.B MULTIPATH
++flag on the device, to enable/disable MPTCP for this interface. The backup-flag 
++will allow a subflow to be established across this interface, but only be used
++as backup.
++
++.TP
++#endif
+ .BR "protodown on " or " protodown off"
+ change the
+ .B PROTODOWN
+diff -rupN orig_iproute2-6.0.0/misc/ss.c iproute2-6.0.0/misc/ss.c
+--- orig_iproute2-6.0.0/misc/ss.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/misc/ss.c	2022-10-24 15:38:39.777802318 +0800
+@@ -219,7 +219,9 @@ enum {
+ 	PACKET_R_DB,
+ 	NETLINK_DB,
+ 	SCTP_DB,
++#if defined(AF_VSOCK)
+ 	VSOCK_ST_DB,
++#endif
+ 	VSOCK_DG_DB,
+ 	TIPC_DB,
+ 	XDP_DB,
+@@ -231,7 +233,9 @@ enum {
+ #define ALL_DB ((1<<MAX_DB)-1)
+ #define INET_L4_DBM ((1<<TCP_DB)|(1<<MPTCP_DB)|(1<<UDP_DB)|(1<<DCCP_DB)|(1<<SCTP_DB))
+ #define INET_DBM (INET_L4_DBM | (1<<RAW_DB))
++#if defined(AF_VSOCK)
+ #define VSOCK_DBM ((1<<VSOCK_ST_DB)|(1<<VSOCK_DG_DB))
++#endif
+ 
+ enum {
+ 	SS_UNKNOWN,
+@@ -326,6 +330,7 @@ static const struct filter default_dbs[M
+ 		.states   = SS_CONN,
+ 		.families = FAMILY_MASK(AF_INET) | FAMILY_MASK(AF_INET6),
+ 	},
++#if defined(AF_VSOCK)
+ 	[VSOCK_ST_DB] = {
+ 		.states   = SS_CONN,
+ 		.families = FAMILY_MASK(AF_VSOCK),
+@@ -334,6 +339,7 @@ static const struct filter default_dbs[M
+ 		.states   = SS_CONN,
+ 		.families = FAMILY_MASK(AF_VSOCK),
+ 	},
++#endif
+ 	[TIPC_DB] = {
+ 		.states   = TIPC_SS_CONN,
+ 		.families = FAMILY_MASK(AF_TIPC),
+@@ -365,10 +371,12 @@ static const struct filter default_afs[A
+ 		.dbs    = (1 << NETLINK_DB),
+ 		.states = (1 << SS_CLOSE),
+ 	},
++#if defined(AF_VSOCK)
+ 	[AF_VSOCK] = {
+ 		.dbs    = VSOCK_DBM,
+ 		.states = SS_CONN,
+ 	},
++#endif
+ 	[AF_TIPC] = {
+ 		.dbs    = (1 << TIPC_DB),
+ 		.states = TIPC_SS_CONN,
+@@ -403,7 +411,11 @@ static int filter_db_parse(struct filter
+ 		ENTRY(all, UDP_DB, DCCP_DB, TCP_DB, MPTCP_DB, RAW_DB,
+ 			   UNIX_ST_DB, UNIX_DG_DB, UNIX_SQ_DB,
+ 			   PACKET_R_DB, PACKET_DG_DB, NETLINK_DB,
++#if defined(AF_VSOCK)
+ 			   SCTP_DB, VSOCK_ST_DB, VSOCK_DG_DB, XDP_DB),
++#else
++			   SCTP_DB, XDP_DB),
++#endif
+ 		ENTRY(inet, UDP_DB, DCCP_DB, TCP_DB, MPTCP_DB, SCTP_DB, RAW_DB),
+ 		ENTRY(udp, UDP_DB),
+ 		ENTRY(dccp, DCCP_DB),
+@@ -425,11 +437,13 @@ static int filter_db_parse(struct filter
+ 		ENTRY(p_dgr, PACKET_DG_DB),	/* alias for packet_dgram */
+ 		ENTRY(netlink, NETLINK_DB),
+ 		ENTRY(tipc, TIPC_DB),
++#if defined(AF_VSOCK)		
+ 		ENTRY(vsock, VSOCK_ST_DB, VSOCK_DG_DB),
+ 		ENTRY(vsock_stream, VSOCK_ST_DB),
+ 		ENTRY(v_str, VSOCK_ST_DB),	/* alias for vsock_stream */
+ 		ENTRY(vsock_dgram, VSOCK_DG_DB),
+ 		ENTRY(v_dgr, VSOCK_DG_DB),	/* alias for vsock_dgram */
++#endif		
+ 		ENTRY(xdp, XDP_DB),
+ #undef ENTRY
+ 	};
+@@ -964,6 +978,7 @@ static const char *proto_name(int protoc
+ 	return "???";
+ }
+ 
++#if defined(AF_VSOCK)
+ static const char *vsock_netid_name(int type)
+ {
+ 	switch (type) {
+@@ -975,6 +990,7 @@ static const char *vsock_netid_name(int
+ 		return "???";
+ 	}
+ }
++#endif
+ 
+ static const char *tipc_netid_name(int type)
+ {
+@@ -1432,9 +1448,11 @@ static void sock_state_print(struct sock
+ 	case AF_TIPC:
+ 		sock_name = tipc_netid_name(s->type);
+ 		break;
++#if defined(AF_VSOCK)
+ 	case AF_VSOCK:
+ 		sock_name = vsock_netid_name(s->type);
+ 		break;
++#endif
+ 	case AF_XDP:
+ 		sock_name = "xdp";
+ 		break;
+@@ -1794,8 +1812,10 @@ static int run_ssfilter(struct ssfilter
+ 			return s->lport == 0 && s->local.data[0] == 0;
+ 		if (s->local.family == AF_NETLINK)
+ 			return s->lport < 0;
++#if defined(AF_VSOCK)
+ 		if (s->local.family == AF_VSOCK)
+ 			return s->lport > 1023;
++#endif
+ 
+ 		return is_ephemeral(s->lport);
+ 	}
+@@ -2194,6 +2214,7 @@ void *parse_devcond(char *name)
+ 	return res;
+ }
+ 
++#if defined(AF_VSOCK)
+ static void vsock_set_inet_prefix(inet_prefix *a, __u32 cid)
+ {
+ 	*a = (inet_prefix){
+@@ -2202,6 +2223,7 @@ static void vsock_set_inet_prefix(inet_p
+ 	};
+ 	memcpy(a->data, &cid, sizeof(cid));
+ }
++#endif
+ 
+ static char* find_port(char *addr, bool is_port)
+ {
+@@ -2298,6 +2320,7 @@ void *parse_hostcond(char *addr, bool is
+ 		goto out;
+ 	}
+ 
++#if defined(AF_VSOCK)
+ 	if (fam == AF_VSOCK) {
+ 		__u32 cid = ~(__u32)0;
+ 
+@@ -2317,6 +2340,7 @@ void *parse_hostcond(char *addr, bool is
+ 		vsock_set_inet_prefix(&a.addr, cid);
+ 		goto out;
+ 	}
++#endif
+ 
+ 	/* URL-like literal [] */
+ 	if (addr[0] == '[') {
+@@ -4923,6 +4947,7 @@ static int netlink_show(struct filter *f
+ 	return 0;
+ }
+ 
++#if defined(AF_VSOCK)
+ static bool vsock_type_skip(struct sockstat *s, struct filter *f)
+ {
+ 	if (s->type == SOCK_STREAM && !(f->dbs & (1 << VSOCK_ST_DB)))
+@@ -5001,6 +5026,7 @@ static int vsock_show(struct filter *f)
+ 
+ 	return handle_netlink_request(f, &req.nlh, sizeof(req), vsock_show_sock);
+ }
++#endif
+ 
+ static void tipc_sock_addr_print(struct rtattr *net_addr, struct rtattr *id)
+ {
+@@ -5128,9 +5154,11 @@ static int generic_show_sock(struct nlms
+ 	case AF_NETLINK:
+ 		ret = netlink_show_sock(nlh, arg);
+ 		break;
++#if defined(AF_VSOCK)
+ 	case AF_VSOCK:
+ 		ret = vsock_show_sock(nlh, arg);
+ 		break;
++#endif
+ 	case AF_XDP:
+ 		ret = xdp_show_sock(nlh, arg);
+ 		break;
+@@ -5491,7 +5519,9 @@ static const struct option long_opts[] =
+ 	{ "raw", 0, 0, 'w' },
+ 	{ "unix", 0, 0, 'x' },
+ 	{ "tipc", 0, 0, OPT_TIPCSOCK},
++#if defined(AF_VSOCK)
+ 	{ "vsock", 0, 0, OPT_VSOCK },
++#endif
+ 	{ "all", 0, 0, 'a' },
+ 	{ "listening", 0, 0, 'l' },
+ 	{ "ipv4", 0, 0, '4' },
+@@ -5585,9 +5615,11 @@ int main(int argc, char *argv[])
+ 		case 'x':
+ 			filter_af_set(&current_filter, AF_UNIX);
+ 			break;
++#if defined(AF_VSOCK)
+ 		case OPT_VSOCK:
+ 			filter_af_set(&current_filter, AF_VSOCK);
+ 			break;
++#endif
+ 		case OPT_TIPCSOCK:
+ 			filter_af_set(&current_filter, AF_TIPC);
+ 			break;
+@@ -5625,8 +5657,10 @@ int main(int argc, char *argv[])
+ 				filter_af_set(&current_filter, AF_NETLINK);
+ 			else if (strcmp(optarg, "tipc") == 0)
+ 				filter_af_set(&current_filter, AF_TIPC);
++#if defined(AF_VSOCK)
+ 			else if (strcmp(optarg, "vsock") == 0)
+ 				filter_af_set(&current_filter, AF_VSOCK);
++#endif
+ 			else if (strcmp(optarg, "xdp") == 0)
+ 				filter_af_set(&current_filter, AF_XDP);
+ 			else if (strcmp(optarg, "help") == 0)
+@@ -5838,8 +5872,10 @@ int main(int argc, char *argv[])
+ 		dccp_show(&current_filter);
+ 	if (current_filter.dbs & (1<<SCTP_DB))
+ 		sctp_show(&current_filter);
++#if defined(AF_VSOCK)
+ 	if (current_filter.dbs & VSOCK_DBM)
+ 		vsock_show(&current_filter);
++#endif
+ 	if (current_filter.dbs & (1<<TIPC_DB))
+ 		tipc_show(&current_filter);
+ 	if (current_filter.dbs & (1<<XDP_DB))
+diff -rupN orig_iproute2-6.0.0/tc/m_vlan.c iproute2-6.0.0/tc/m_vlan.c
+--- orig_iproute2-6.0.0/tc/m_vlan.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/tc/m_vlan.c	2022-10-24 15:38:39.777802318 +0800
+@@ -25,6 +25,8 @@ static const char * const action_names[]
+ 	[TCA_VLAN_ACT_MODIFY] = "modify",
+ 	[TCA_VLAN_ACT_POP_ETH] = "pop_eth",
+ 	[TCA_VLAN_ACT_PUSH_ETH] = "push_eth",
++	[TCA_VLAN_ACT_POP_SAVE] = "pop_save",
++	[TCA_VLAN_ACT_PUSH_RESTORE] = "push_restore",
+ };
+ 
+ static void explain(void)
+@@ -35,6 +37,9 @@ static void explain(void)
+ 		"       vlan modify [ protocol VLANPROTO ] id VLANID [ priority VLANPRIO ] [CONTROL]\n"
+ 		"       vlan pop_eth [CONTROL]\n"
+ 		"       vlan push_eth dst_mac LLADDR src_mac LLADDR [CONTROL]\n"
++		"       vlan pop_save\n"
++		"       vlan push_restore\n"
++		"       VLANPRIO is either priority number or \"copy\" keyword to copy from existing vlan tag\n"
+ 		"       VLANPROTO is one of 802.1Q or 802.1AD\n"
+ 		"            with default: 802.1Q\n"
+ 		"       CONTROL := reclassify | pipe | drop | continue | pass |\n"
+@@ -115,6 +120,18 @@ static int parse_vlan(struct action_util
+ 				return -1;
+ 			}
+ 			action = TCA_VLAN_ACT_PUSH_ETH;
++		} else if (matches(*argv, "pop_save") == 0) {
++			if (action) {
++				unexpected(*argv);
++				return -1;
++			}
++			action = TCA_VLAN_ACT_POP_SAVE;
++		} else if (matches(*argv, "push_restore") == 0) {
++			if (action) {
++				unexpected(*argv);
++				return -1;
++			}
++			action = TCA_VLAN_ACT_PUSH_RESTORE;
+ 		} else if (matches(*argv, "id") == 0) {
+ 			if (!has_push_attribs(action))
+ 				invarg("only valid for push/modify", *argv);
+@@ -136,7 +153,9 @@ static int parse_vlan(struct action_util
+ 				invarg("only valid for push/modify", *argv);
+ 
+ 			NEXT_ARG();
+-			if (get_u8(&prio, *argv, 0) || (prio & ~0x7))
++			if (matches(*argv, "copy") == 0)
++			    prio = TCA_VLAN_PRIORITY_COPY;
++			else if (get_u8(&prio, *argv, 0) || (prio & ~0x7))
+ 				invarg("prio is invalid", *argv);
+ 			prio_set = 1;
+ 		} else if (matches(*argv, "dst_mac") == 0) {
+@@ -179,7 +198,7 @@ static int parse_vlan(struct action_util
+ 		}
+ 	}
+ 
+-	if (has_push_attribs(action) && !id_set) {
++	if (action == TCA_VLAN_ACT_PUSH && !id_set) {
+ 		fprintf(stderr, "id needs to be set for %s\n",
+ 			action_names[action]);
+ 		explain();
+@@ -269,7 +288,10 @@ static int print_vlan(struct action_util
+ 		}
+ 		if (tb[TCA_VLAN_PUSH_VLAN_PRIORITY]) {
+ 			val = rta_getattr_u8(tb[TCA_VLAN_PUSH_VLAN_PRIORITY]);
+-			print_uint(PRINT_ANY, "priority", " priority %u", val);
++			if (val == TCA_VLAN_PRIORITY_COPY)
++				print_string(PRINT_ANY, "priority", " priority %s", "copy");
++			else
++				print_uint(PRINT_ANY, "priority", " priority %u", val);
+ 		}
+ 		break;
+ 	case TCA_VLAN_ACT_PUSH_ETH:
+diff -rupN orig_iproute2-6.0.0/tc/tc_util.h iproute2-6.0.0/tc/tc_util.h
+--- orig_iproute2-6.0.0/tc/tc_util.h	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/tc/tc_util.h	2022-10-24 15:38:39.777802318 +0800
+@@ -26,6 +26,10 @@ enum
+ #define TCA_PRIO_MAX    (__TCA_PRIO_MAX - 1)
+ #endif
+ 
++#ifndef CLOCK_BOOTTIME
++#define CLOCK_BOOTTIME          7
++#endif
++
+ #define FILTER_NAMESZ	16
+ 
+ struct qdisc_util {
+diff -rupN orig_iproute2-6.0.0/tc/f_flower.c  iproute2-6.0.0/tc/f_flower.c
+--- orig_iproute2-6.0.0/tc/f_flower.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.0.0/tc/f_flower.c	2022-10-29 10:54:30.130760405 +0800
+@@ -52,9 +52,11 @@ static void explain(void)
+ 		"			num_of_vlans VLANS_COUNT |\n"
+ 		"			vlan_id VID |\n"
+ 		"			vlan_prio PRIORITY |\n"
++		"			vlan_dei DEI |\n"
+ 		"			vlan_ethtype [ ipv4 | ipv6 | ETH-TYPE ] |\n"
+ 		"			cvlan_id VID |\n"
+ 		"			cvlan_prio PRIORITY |\n"
++		"			cvlan_dei DEI |\n"
+ 		"			cvlan_ethtype [ ipv4 | ipv6 | ETH-TYPE ] |\n"
+ 		"			pppoe_sid PSID |\n"
+ 		"			ppp_proto [ ipv4 | ipv6 | mpls_uc | mpls_mc | PPP_PROTO ]"
+@@ -1572,6 +1574,18 @@ static int flower_parse_opt(struct filte
+ 			}
+ 			addattr8(n, MAX_MSG,
+ 				 TCA_FLOWER_KEY_VLAN_PRIO, vlan_prio);
++		} else if (matches(*argv, "vlan_dei") == 0) {
++			__u8 vlan_dei;
++
++			NEXT_ARG();
++			if (!eth_type_vlan(eth_type, num_of_vlans > 0)) {
++				fprintf(stderr, "Can't set \"vlan_dei\" if ethertype isn't 802.1Q or 802.1AD"
++						" and num_of_vlans is 0\n");
++				return -1;
++			}
++			ret = get_u8(&vlan_dei, *argv, 10);
++			addattr8(n, MAX_MSG,
++				 TCA_FLOWER_KEY_VLAN_DEI, vlan_dei);
+ 		} else if (matches(*argv, "vlan_ethtype") == 0) {
+ 			NEXT_ARG();
+ 			ret = flower_parse_vlan_eth_type(*argv, eth_type,
+@@ -1612,6 +1626,18 @@ static int flower_parse_opt(struct filte
+ 			}
+ 			addattr8(n, MAX_MSG,
+ 				 TCA_FLOWER_KEY_CVLAN_PRIO, cvlan_prio);
++		} else if (matches(*argv, "cvlan_dei") == 0) {
++			__u8 cvlan_dei;
++
++			NEXT_ARG();
++			if (!eth_type_vlan(vlan_ethtype, num_of_vlans > 1)) {
++				fprintf(stderr, "Can't set \"cvlan_dei\" if inner vlan ethertype isn't 802.1Q or 802.1AD"
++						" and num_of_vlans is less than 2\n");
++				return -1;
++			}
++			ret = get_u8(&cvlan_dei, *argv, 10);
++			addattr8(n, MAX_MSG,
++				 TCA_FLOWER_KEY_CVLAN_DEI, cvlan_dei);
+ 		} else if (matches(*argv, "cvlan_ethtype") == 0) {
+ 			NEXT_ARG();
+ 			/* get new ethtype for later parsing */
+@@ -2775,6 +2801,14 @@ static int flower_print_opt(struct filte
+ 			   rta_getattr_u8(attr));
+ 	}
+ 
++	if (tb[TCA_FLOWER_KEY_VLAN_DEI]) {
++		struct rtattr *attr = tb[TCA_FLOWER_KEY_VLAN_DEI];
++
++		print_nl();
++		print_uint(PRINT_ANY, "vlan_dei", "  vlan_dei %d",
++			   rta_getattr_u8(attr));
++	}
++
+ 	if (tb[TCA_FLOWER_KEY_VLAN_ETH_TYPE]) {
+ 		SPRINT_BUF(buf);
+ 		struct rtattr *attr = tb[TCA_FLOWER_KEY_VLAN_ETH_TYPE];
+@@ -2801,6 +2835,14 @@ static int flower_print_opt(struct filte
+ 			   rta_getattr_u8(attr));
+ 	}
+ 
++	if (tb[TCA_FLOWER_KEY_CVLAN_DEI]) {
++		struct rtattr *attr = tb[TCA_FLOWER_KEY_CVLAN_DEI];
++
++		print_nl();
++		print_uint(PRINT_ANY, "cvlan_dei", "  cvlan_dei %d",
++			   rta_getattr_u8(attr));
++	}
++
+ 	if (tb[TCA_FLOWER_KEY_CVLAN_ETH_TYPE]) {
+ 		SPRINT_BUF(buf);
+ 		struct rtattr *attr = tb[TCA_FLOWER_KEY_CVLAN_ETH_TYPE];
+diff -rupN orig_iproute2-6.3.0/tc/m_vlan.c  iproute2-6.3.0/tc/m_vlan.c		
+--- orig_iproute2-6.3.0/tc/m_vlan.c	2023-04-26 17:04:28.784879534 +0800
++++ iproute2-6.3.0/tc/m_vlan.c	2023-04-26 17:07:31.386935094 +0800
+@@ -23,6 +23,7 @@
+ 	[TCA_VLAN_ACT_PUSH_ETH] = "push_eth",
+ 	[TCA_VLAN_ACT_POP_SAVE] = "pop_save",
+ 	[TCA_VLAN_ACT_PUSH_RESTORE] = "push_restore",
++	[TCA_VLAN_ACT_SAVE] = "save",
+ };
+ 
+ static void explain(void)
+@@ -35,6 +36,7 @@
+ 		"       vlan push_eth dst_mac LLADDR src_mac LLADDR [CONTROL]\n"
+ 		"       vlan pop_save\n"
+ 		"       vlan push_restore\n"
++		"       vlan save\n"
+ 		"       VLANPRIO is either priority number or \"copy\" keyword to copy from existing vlan tag\n"
+ 		"       VLANPROTO is one of 802.1Q or 802.1AD\n"
+ 		"            with default: 802.1Q\n"
+@@ -128,6 +130,12 @@
+ 				return -1;
+ 			}
+ 			action = TCA_VLAN_ACT_PUSH_RESTORE;
++		} else if (matches(*argv, "save") == 0) {
++			if (action) {
++				unexpected(*argv);
++				return -1;
++			}
++			action = TCA_VLAN_ACT_SAVE;
+ 		} else if (matches(*argv, "id") == 0) {
+ 			if (!has_push_attribs(action))
+ 				invarg("only valid for push/modify", *argv);
+diff -rupN orig_iproute2-6.3.0/include/uapi/linux/tc_act/tc_vlan.h  iproute2-6.3.0/include/uapi/linux/tc_act/tc_vlan.h	
+--- orig_iproute2-6.3.0/include/uapi/linux/tc_act/tc_vlan.h	2023-04-26 17:04:28.479130894 +0800
++++ iproute2-6.3.0/include/uapi/linux/tc_act/tc_vlan.h	2023-04-26 16:53:57.799013400 +0800
+@@ -15,6 +15,7 @@
+ #define TCA_VLAN_ACT_PUSH_ETH	5
+ #define TCA_VLAN_ACT_POP_SAVE       106
+ #define TCA_VLAN_ACT_PUSH_RESTORE   107
++#define TCA_VLAN_ACT_SAVE           108
+ 
+ #define TCA_VLAN_PRIORITY_COPY 0xff
+
+diff -rupN orig_iproute2-6.3.0/include/uapi/linux/tc_act/tc_skbedit.h  iproute2-6.3.0/include/uapi/linux/tc_act/tc_skbedit.h	
+--- orig_iproute2-6.4.0/include/uapi/linux/tc_act/tc_skbedit.h	2023-04-26 17:04:28.479130894 +0800
++++ iproute2-6.4.0/include/uapi/linux/tc_act/tc_skbedit.h	2023-04-26 16:53:57.799013400 +0800
+@@ -17,6 +17,7 @@
+ #define SKBEDIT_F_MASK			0x10
+ #define SKBEDIT_F_INHERITDSFIELD	0x20
+ #define SKBEDIT_F_TXQ_SKBHASH		0x40
++#define SKBEDIT_F_FSMARKID		0x80
+ 
+ struct tc_skbedit {
+ 	tc_gen;
+@@ -33,6 +34,7 @@ enum {
+ 	TCA_SKBEDIT_PTYPE,
+ 	TCA_SKBEDIT_MASK,
+ 	TCA_SKBEDIT_FLAGS,
++	TCA_SKBEDIT_FSMARKID,
+ 	TCA_SKBEDIT_QUEUE_MAPPING_MAX,
+ 	__TCA_SKBEDIT_MAX
+ }; 
+diff -rupN orig_iproute2-6.4.0/tc/m_skbedit.c iproute2-6.4.0/tc/m_skbedit.c
+--- orig_iproute2-6.4.0/tc/m_skbedit.c	2022-10-04 23:17:15.000000000 +0800
++++ iproute2-6.4.0/tc/m_skbedit.c	2022-10-24 15:38:39.777802318 +0800
+@@ -18,10 +18,11 @@
+ 
+ static void explain(void)
+ {
+-	fprintf(stderr, "Usage: ... skbedit <[QM] [PM] [MM] [PT] [IF]>\n"
++	fprintf(stderr, "Usage: ... skbedit <[QM] [PM] [MM] [FM] [PT] [IF]>\n"
+ 		"QM = queue_mapping QUEUE_MAPPING\n"
+ 		"PM = priority PRIORITY\n"
+ 		"MM = mark MARK[/MASK]\n"
++		"FM = fsmark_id QUERYID\n"
+ 		"PT = ptype PACKETYPE\n"
+ 		"IF = inheritdsfield\n"
+ 		"PACKETYPE = is one of:\n"
+@@ -30,6 +31,7 @@ static void explain(void)
+ 		"PRIORITY = classID to assign to priority field\n"
+ 		"MARK = firewall mark to set\n"
+ 		"MASK = mask applied to firewall mark (0xffffffff by default)\n"
++		"QUERYID = fc nf-flwstats query ID\n"
+ 		"note: inheritdsfield maps DS field to skb->priority\n");
+ }
+ 
+@@ -50,7 +52,7 @@ parse_skbedit(struct action_util *a, int
+ 	struct rtattr *tail;
+ 	unsigned int tmp;
+ 	__u16 queue_mapping, ptype;
+-	__u32 flags = 0, priority, mark, mask;
++	__u32 flags = 0, priority, mark, mask, fsmark_id;
+ 	__u64 pure_flags = 0;
+ 	struct tc_skbedit sel = { 0 };
+ 
+@@ -99,6 +101,14 @@ parse_skbedit(struct action_util *a, int
+ 				flags |= SKBEDIT_F_MASK;
+ 			}
+ 			ok++;
++		} else if (matches(*argv, "fsmark_id") == 0) {
++			flags |= SKBEDIT_F_FSMARKID;
++			NEXT_ARG();
++			if (get_u32(&fsmark_id, *argv, 0)) {
++				fprintf(stderr, "Illegal query id\n");
++				return -1;
++			}
++			ok++;
+ 		} else if (matches(*argv, "ptype") == 0) {
+ 
+ 			NEXT_ARG();
+@@ -165,6 +175,9 @@ parse_skbedit(struct action_util *a, int
+ 	if (flags & SKBEDIT_F_MASK)
+ 		addattr_l(n, MAX_MSG, TCA_SKBEDIT_MASK,
+ 			  &mask, sizeof(mask));
++	if (flags & SKBEDIT_F_FSMARKID)
++		addattr_l(n, MAX_MSG, TCA_SKBEDIT_FSMARKID,
++			  &fsmark_id, sizeof(fsmark_id));
+ 	if (flags & SKBEDIT_F_PTYPE)
+ 		addattr_l(n, MAX_MSG, TCA_SKBEDIT_PTYPE,
+ 			  &ptype, sizeof(ptype));
+@@ -215,6 +228,10 @@ static int print_skbedit(struct action_u
+ 		print_hex(PRINT_ANY, "mask", "/%#x",
+ 			  rta_getattr_u32(tb[TCA_SKBEDIT_MASK]));
+ 	}
++	if (tb[TCA_SKBEDIT_FSMARKID] != NULL) {
++		print_uint(PRINT_ANY, "fsmark_id", " %u",
++			   rta_getattr_u32(tb[TCA_SKBEDIT_FSMARKID]));
++	}
+ 	if (tb[TCA_SKBEDIT_PTYPE] != NULL) {
+ 		ptype = rta_getattr_u16(tb[TCA_SKBEDIT_PTYPE]);
+ 		if (ptype == PACKET_HOST)

@@ -1,0 +1,13 @@
+diff --git a/uloop.c b/uloop.c
+index 8517366..23987aa 100644
+--- a/uloop.c
++++ b/uloop.c
+@@ -427,7 +427,7 @@ static void uloop_install_handler(int signum, void (*handler)(int), struct sigac
+ 		if (s.sa_handler == SIG_DFL) { /* Do not override existing custom signal handlers */
+ 			memcpy(old, &s, sizeof(struct sigaction));
+ 			s.sa_handler = handler;
+-			s.sa_flags = 0;
++			s.sa_flags |= SA_RESTART; // BCM: allow interrupted system calls to continue instead of failing with EINTR
+ 			act = &s;
+ 		}
+ 	}

@@ -1,0 +1,12 @@
+--- libxml2-2.10.3/configure.ac	2022-11-28 14:05:10.247318323 +0800
++++ libxml2/configure.ac	2022-11-28 14:06:32.675488793 +0800
+@@ -39,7 +39,8 @@
+ 
+ VERSION=${LIBXML_VERSION}
+ 
+-AM_INIT_AUTOMAKE([1.16.3 foreign no-dist-gzip dist-xz])
++#AM_INIT_AUTOMAKE([1.16.3 foreign no-dist-gzip dist-xz])
++AM_INIT_AUTOMAKE([1.12.0 foreign no-dist-gzip dist-xz])
+ AM_MAINTAINER_MODE([enable])
+ AM_SILENT_RULES([yes])
+ 

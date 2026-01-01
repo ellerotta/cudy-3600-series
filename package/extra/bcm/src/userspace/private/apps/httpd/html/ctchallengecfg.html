@@ -1,0 +1,187 @@
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <title>Controller Trust Challenge Configuration</title>
+    <link rel='stylesheet' href='tabletab.css' type='text/css'>
+    <script src='jquery.js'></script>
+    <script>
+      var sessionKey='<%ejGetOther(sessionKey)%>';
+      var uspAction='<%ejGet(uspAction)%>';
+      var uspInfo='<%ejGet(uspInfo)%>';
+
+      function cfgClick() {
+        var val = '';
+        var loc = 'ctchallengecfg.cgi?';
+
+        // Enable Controller Trust Challenge
+        if (document.getElementById('enable-1').checked)
+          val += '1|';
+        else
+          val += '0|';
+        if (uspAction == 'edit') {
+          // Alias
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            val += info[1] + '|';
+          }else {
+            // Empty Alias
+            val += '|';
+          }
+        } else {
+          // Empty Alias
+          val += '|';
+        }
+        // Description
+        val += document.getElementById('desc').value + '|';
+        // Role
+        val += document.getElementById('role').value + '|';
+        // Type
+        val += document.getElementById('challengeType').value + '|';
+        // Value
+        val += document.getElementById('challenge').value + '|';
+        // Value Type
+        val += document.getElementById('mediaType').value + '|';
+        // Instruction
+        val += document.getElementById('inst').value + '|';
+        // Instruction Type
+        val += document.getElementById('instType').value + '|';
+        // Retries
+        val += document.getElementById('retries').value + '|';
+        // Lockout Period
+        val += document.getElementById('lockPeriod').value + '|';
+
+        if (uspAction == 'edit')
+          loc += 'uspAction=apply&uspInfo=' + val;
+        else
+          loc += 'uspAction=new&uspInfo=' + val;
+
+        loc += '&sessionKey=' + sessionKey;
+
+        location.href = loc;
+      }
+
+      function bodyLoad() {
+        if (uspAction == 'edit') {
+          if (uspInfo.length > 0) {
+            var info = uspInfo.split('|');
+            // Enable Controller Trust Challenge
+            if (info[0] == 'Yes')
+              document.getElementById('enable-1').checked = true;
+            else
+              document.getElementById('enable-0').checked = true;
+            // Alias
+            document.getElementById('alias').value = info[1];
+            // Description
+            document.getElementById('desc').value = info[2];
+            // Role
+            document.getElementById('role').value = info[3];
+            // Type
+            document.getElementById('challengeType').value = info[4];
+            // Value
+            document.getElementById('challenge').value = info[5];
+            // Value Type
+            document.getElementById('mediaType').value = info[6];
+            // Instruction
+            document.getElementById('inst').value = info[7];
+            // Instruction Type
+            document.getElementById('instType').value = info[8];
+            // Retries
+            document.getElementById('retries').value = info[9];
+            // Lockout Period
+            document.getElementById('lockPeriod').value = info[10];
+          }
+          // Edit button
+          document.getElementById('btnCfg').value = 'Apply';
+        } else {
+          // Disable Controller Trust Challenge by default
+          document.getElementById('enable-0').checked = true;
+          document.getElementById('retries').value = '0';
+          // Lockout Period has default value as 30 seconds
+          document.getElementById('lockPeriod').value = '30';
+          // Add button
+          document.getElementById('btnCfg').value = 'Add';
+        }
+      }
+    </script>
+  </head>
+  <body onload='bodyLoad()'>
+  <form>
+    <center><h3>Controller Trust Challenge Configuration</h3>
+    <br><br>
+    <div id='ctchallenge'><center>
+      <table id='tblctchallenge' border='1' cellpadding='4' cellspacing='0'>
+        <tbody>
+          <tr>
+            <td class='hd'>Enable Challenge</td>
+            <td><input name='enable' id='enable-0' type='radio'>  No</td>
+            <td><input name='enable' id='enable-1' type='radio'>  Yes</td>
+          </tr>
+          <tr>
+            <td class='hd'>Alias</td>
+            <td colspan='2'><input type='text' id='alias' disabled></td>
+          </tr>
+          <tr>
+            <td class='hd'>Description</td>
+            <td colspan='2'><input type='text' id='desc'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Role</td>
+            <td colspan='2'>
+				<select id='role'>
+                  <option value='cpe-role-0'></option>
+<%ejGetOther(uspGetRoleNameList)%>
+                </select>
+            </td>
+          </tr>
+          <tr>
+            <td class='hd'>Type</td>
+            <td colspan='2'>
+				<select id='challengeType'>
+                  <option value='Passphrase' selected='selected'>Passphrase</option>
+                </select>
+            </td>
+          </tr>
+          <tr>
+            <td class='hd'>Value</td>
+            <td colspan='2'><input type='text' id='challenge'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Value Type</td>
+            <td colspan='2'>
+				<select id='mediaType'>
+                  <option value='text/plain' selected='selected'>text/plain</option>
+                  <option value='image/jpeg'>image/jpeg</option>
+                </select>
+            </td>
+          </tr>
+          <tr>
+            <td class='hd'>Instruction</td>
+            <td colspan='2'><input type='text' id='inst'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Instruction Type</td>
+            <td colspan='2'>
+				<select id='instType'>
+                  <option value='text/plain' selected='selected'>text/plain</option>
+                  <option value='image/jpeg'>image/jpeg</option>
+                  <option value='text/html'>text/html</option>
+                </select>
+            </td>
+          </tr>
+          <tr>
+            <td class='hd'>Retries</td>
+            <td colspan='2'><input type='text' id='retries'></td>
+          </tr>
+          <tr>
+            <td class='hd'>Lockout Period (seconds)</td>
+            <td colspan='2'><input type='text' id='lockPeriod'></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <br><br>
+    <input type='button' id='btnCfg' onclick='cfgClick()'>
+    <br><br>
+  </form>
+  </body>
+</html>

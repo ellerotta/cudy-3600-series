@@ -1,0 +1,266 @@
+diff -urN radvd-2.19-coverity/defaults.h radvd/defaults.h
+--- radvd-2.19-coverity/defaults.h	2022-08-12 16:37:03.284286969 +0800
++++ radvd/defaults.h	2022-08-17 12:31:00.260852261 +0800
+@@ -59,7 +59,7 @@
+ #define DFLT_AdvOnLinkFlag 1
+ #define DFLT_AdvPreferredLifetime 14400 /* seconds */
+ #define DFLT_AdvAutonomousFlag 1
+-#define DFLT_DeprecatePrefixFlag 0
++#define DFLT_DeprecatePrefixFlag 1
+ #define DFLT_DecrementLifetimesFlag 0
+ 
+ /* Each route has an associated: */
+diff -urN radvd-2.19-coverity/radvd.c radvd/radvd.c
+--- radvd-2.19-coverity/radvd.c	2022-08-16 11:09:08.670995567 +0800
++++ radvd/radvd.c	2022-08-17 12:36:27.337771554 +0800
+@@ -73,30 +73,44 @@
+ 
+ #endif
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static volatile int sighup_received = 0;
+ static volatile int sigint_received = 0;
++#endif
+ static volatile int sigterm_received = 0;
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static volatile int sigusr1_received = 0;
++#endif
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static int check_conffile_perm(const char *, const char *);
++#endif
+ static int drop_root_privileges(const char *);
+ static int open_and_lock_pid_file(char const *daemon_pid_file_ident);
+ static int write_pid_file(char const *daemon_pid_file_ident, pid_t pid);
+ static pid_t daemonp(char const *daemon_pid_file_ident);
+ static pid_t do_daemonize(int log_method, char const *daemon_pid_file_ident);
+ static struct Interface *main_loop(int sock, struct Interface *ifaces, char const *conf_path);
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static struct Interface *reload_config(int sock, struct Interface *ifaces, char const *conf_path);
++#endif
+ static void check_pid_file(char const *daemon_pid_file_ident);
+ static void config_interface(struct Interface *iface);
+ static void kickoff_adverts(int sock, struct Interface *iface);
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static void reset_prefix_lifetimes(struct Interface *ifaces);
+ static void reset_prefix_lifetimes_foo(struct Interface *iface, void *data);
++#endif
+ static void setup_iface_foo(struct Interface *iface, void *data);
+ static void setup_ifaces(int sock, struct Interface *ifaces);
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static void sighup_handler(int sig);
+ static void sigint_handler(int sig);
++#endif
+ static void sigterm_handler(int sig);
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static void sigusr1_handler(int sig);
++#endif
+ static void stop_advert_foo(struct Interface *iface, void *data);
+ static void stop_adverts(int sock, struct Interface *ifaces);
+ static void timer_handler(int sock, struct Interface *iface);
+@@ -185,13 +199,17 @@
+ int main(int argc, char *argv[])
+ {
+ 	int c;
+-	int log_method = L_UNSPEC;
++	int log_method = L_STDERR_SYSLOG;
+ 	char *logfile = PATH_RADVD_LOG;
+-	int facility = LOG_FACILITY;
++	int facility = LOG_DAEMON;    //brcm
+ 	char *username = NULL;
+ 	char *chrootdir = NULL;
+ 	int configtest = 0;
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	int daemonize = 0;
++#else
+ 	int daemonize = 1;
++#endif
+ 
+ 	char const *pname = ((pname = strrchr(argv[0], '/')) != NULL) ? pname + 1 : argv[0];
+ 
+@@ -317,6 +335,7 @@
+ 		flog(LOG_INFO, "version %s started", VERSION);
+ 	}
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ 	/* check that 'other' cannot write the file
+ 	 * for non-root, also that self/own group can't either
+ 	 */
+@@ -327,6 +346,7 @@
+ 		} else
+ 			flog(LOG_WARNING, "Insecure file permissions, but continuing anyway");
+ 	}
++#endif
+ 
+ 	/* parse config file */
+ 	struct Interface *ifaces = NULL;
+@@ -347,10 +367,12 @@
+ 		exit(1);
+ 	}
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ 	/* if we know how to do it, check whether forwarding is enabled */
+ 	if (check_ip6_forwarding()) {
+ 		flog(LOG_WARNING, "IPv6 forwarding seems to be disabled, but continuing anyway");
+ 	}
++#endif
+ 
+ 	int const pidfd = open_and_lock_pid_file(daemon_pid_file_ident);
+ 
+@@ -471,26 +493,52 @@
+ 	sigemptyset(&sigmask);
+ 	sigaddset(&sigmask, SIGHUP);
+ 	sigaddset(&sigmask, SIGTERM);
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	sigaddset(&sigmask, SIGPIPE);
++#endif
+ 	sigaddset(&sigmask, SIGINT);
+ 	sigaddset(&sigmask, SIGUSR1);
+ 	sigprocmask(SIG_BLOCK, &sigmask, NULL);
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	sa.sa_handler = SIG_IGN;
++#else
+ 	sa.sa_handler = sighup_handler;
++#endif
+ 	sigemptyset(&sa.sa_mask);
+ 	sa.sa_flags = 0;
+ 	sigaction(SIGHUP, &sa, 0);
+ 
+ 	sa.sa_handler = sigterm_handler;
+ 	sigemptyset(&sa.sa_mask);
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	sa.sa_flags = SA_RESETHAND;
++#else
+ 	sa.sa_flags = 0;
++#endif
+ 	sigaction(SIGTERM, &sa, 0);
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	sa.sa_handler = SIG_IGN;
++	sigemptyset(&sa.sa_mask);
++	sa.sa_flags = 0;
++	sigaction(SIGPIPE, &sa, 0);
++#endif
++
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	sa.sa_handler = SIG_IGN;
++#else
+ 	sa.sa_handler = sigint_handler;
++#endif
+ 	sigemptyset(&sa.sa_mask);
+ 	sa.sa_flags = 0;
+ 	sigaction(SIGINT, &sa, 0);
+ 
++#if defined(BRCM_CMS_BUILD) || defined(BRCM_BDK_BUILD)
++	sa.sa_handler = SIG_IGN;
++#else
+ 	sa.sa_handler = sigusr1_handler;
++#endif
+ 	sigemptyset(&sa.sa_mask);
+ 	sa.sa_flags = 0;
+ 	sigaction(SIGUSR1, &sa, 0);
+@@ -559,19 +607,22 @@
+ 			if (next_iface_to_expire)
+ 				timer_handler(sock, next_iface_to_expire);
+ 		} else if (rc == -1) {
+-			dlog(LOG_INFO, 3, "poll returned early: %s", strerror(errno));
++			dlog(LOG_WARNING, 3, "poll returned early: %s", strerror(errno));
+ 		}
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ 		if (sigint_received) {
+ 			flog(LOG_WARNING, "exiting, %d sigint(s) received", sigint_received);
+ 			break;
+ 		}
++#endif
+ 
+ 		if (sigterm_received) {
+ 			flog(LOG_WARNING, "exiting, %d sigterm(s) received", sigterm_received);
+ 			break;
+ 		}
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ 		if (sighup_received) {
+ 			dlog(LOG_INFO, 3, "sig hup received");
+ 			ifaces = reload_config(sock, ifaces, conf_path);
+@@ -583,6 +634,7 @@
+ 			reset_prefix_lifetimes(ifaces);
+ 			sigusr1_received = 0;
+ 		}
++#endif
+ 	}
+ 
+ 	return ifaces;
+@@ -791,6 +843,7 @@
+ 
+ static void setup_ifaces(int sock, struct Interface *ifaces) { for_each_iface(ifaces, setup_iface_foo, &sock); }
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static struct Interface *reload_config(int sock, struct Interface *ifaces, char const *conf_path)
+ {
+ 	free_ifaces(ifaces);
+@@ -811,6 +864,7 @@
+ }
+ 
+ static void sighup_handler(int sig) { sighup_received = 1; }
++#endif
+ 
+ static void sigterm_handler(int sig)
+ {
+@@ -821,6 +875,7 @@
+ 	}
+ }
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static void sigint_handler(int sig)
+ {
+ 	++sigint_received;
+@@ -851,6 +906,7 @@
+ }
+ 
+ static void reset_prefix_lifetimes(struct Interface *ifaces) { for_each_iface(ifaces, reset_prefix_lifetimes_foo, 0); }
++#endif
+ 
+ static int drop_root_privileges(const char *username)
+ {
+@@ -867,6 +923,7 @@
+ 	return 0;
+ }
+ 
++#if !defined(BRCM_CMS_BUILD) && !defined(BRCM_BDK_BUILD)
+ static int check_conffile_perm(const char *username, const char *conf_file)
+ {
+ 	FILE *fp = fopen(conf_file, "r");
+@@ -903,6 +960,7 @@
+ 
+ 	return 0;
+ }
++#endif
+ 
+ static void version(void)
+ {
+@@ -911,7 +969,7 @@
+ 	fprintf(stderr, "  default config file		\"%s\"\n", PATH_RADVD_CONF);
+ 	fprintf(stderr, "  default pidfile		\"%s\"\n", PATH_RADVD_PID);
+ 	fprintf(stderr, "  default logfile		\"%s\"\n", PATH_RADVD_LOG);
+-	fprintf(stderr, "  default syslog facility	%d\n", LOG_FACILITY);
++	fprintf(stderr, "  default syslog facility	%d\n", LOG_DAEMON);
+ 	fprintf(stderr, "Please send bug reports or suggestions to %s.\n", CONTACT_EMAIL);
+ 
+ 	exit(1);
+--- radvd/includes.h.orig	2022-10-19 13:35:16.277754051 -0400
++++ radvd/includes.h	2022-10-19 13:35:29.795864452 -0400
+@@ -76,12 +76,7 @@
+ #include <sys/sysctl.h>
+ #endif
+ 
+-#if !defined(__GLIBC__) && defined(linux)
+-#include <linux/if.h>
+-#define IF_NAMESIZE IFNAMSIZ
+-#else
+ #include <net/if.h>
+-#endif
+ 
+ #ifdef HAVE_NET_IF_DL_H
+ #include <net/if_dl.h>

@@ -1,0 +1,335 @@
+diff -urN radvd-2.19/device-linux.c radvd-2.19-coverity/device-linux.c
+--- radvd-2.19/device-linux.c	2019-07-20 11:58:19.000000000 +0800
++++ radvd-2.19-coverity/device-linux.c	2022-08-16 15:45:12.898555027 +0800
+@@ -139,7 +139,7 @@
+ 			flog(LOG_ERR, "%s address length too big: %d", iface->props.name, if_hwaddr_len_bytes);
+ 			return -2;
+ 		}
+-		memcpy(iface->sllao.if_hwaddr, ifr.ifr_hwaddr.sa_data, if_hwaddr_len_bytes);
++		memcpy(iface->sllao.if_hwaddr, ifr.ifr_hwaddr.sa_data, MIN(if_hwaddr_len_bytes, sizeof(ifr.ifr_hwaddr.sa_data)));
+ 
+ 		char zero[sizeof(iface->props.if_addr)];
+ 		memset(zero, 0, sizeof(zero));
+diff -urN radvd-2.19/gram.y radvd-2.19-coverity/gram.y
+--- radvd-2.19/gram.y	2019-07-20 11:58:19.000000000 +0800
++++ radvd-2.19-coverity/gram.y	2022-08-17 15:01:53.010302655 +0800
+@@ -789,14 +789,16 @@
+ 
+ lowpancohead	: T_LOWPANCO
+ 		{
+-			lowpanco = malloc(sizeof(struct AdvLowpanCo));
++			if (!lowpanco) {
++				lowpanco = malloc(sizeof(struct AdvLowpanCo));
+ 
+-			if (lowpanco == NULL) {
+-				flog(LOG_CRIT, "malloc failed: %s", strerror(errno));
+-				ABORT;
+-			}
++				if (lowpanco == NULL) {
++					flog(LOG_CRIT, "malloc failed: %s", strerror(errno));
++					ABORT;
++				}
+ 
+-			memset(lowpanco, 0, sizeof(struct AdvLowpanCo));
++				memset(lowpanco, 0, sizeof(struct AdvLowpanCo));
++			}
+ 		}
+ 		;
+ 
+@@ -837,15 +839,17 @@
+ 
+ abrohead_new	: T_ABRO IPV6ADDR
+ 		{
+-			abro = malloc(sizeof(struct AdvAbro));
++			if (!abro) {
++				abro = malloc(sizeof(struct AdvAbro));
+ 
+-			if (abro == NULL) {
+-				flog(LOG_CRIT, "malloc failed: %s", strerror(errno));
+-				ABORT;
+-			}
++				if (abro == NULL) {
++					flog(LOG_CRIT, "malloc failed: %s", strerror(errno));
++					ABORT;
++				}
+ 
+-			memset(abro, 0, sizeof(struct AdvAbro));
+-			memcpy(&abro->LBRaddress, $2, sizeof(struct in6_addr));
++				memset(abro, 0, sizeof(struct AdvAbro));
++				memcpy(&abro->LBRaddress, $2, sizeof(struct in6_addr));
++			}
+ 		}
+ 		;
+ 
+@@ -857,15 +861,17 @@
+ 				, num_lines
+ 				, $4
+ 			);
+-			abro = malloc(sizeof(struct AdvAbro));
++			if (!abro) {
++				abro = malloc(sizeof(struct AdvAbro));
+ 
+-			if (abro == NULL) {
+-				flog(LOG_CRIT, "malloc failed: %s", strerror(errno));
+-				ABORT;
+-			}
++				if (abro == NULL) {
++					flog(LOG_CRIT, "malloc failed: %s", strerror(errno));
++					ABORT;
++				}
+ 
+-			memset(abro, 0, sizeof(struct AdvAbro));
+-			memcpy(&abro->LBRaddress, $2, sizeof(struct in6_addr));
++				memset(abro, 0, sizeof(struct AdvAbro));
++				memcpy(&abro->LBRaddress, $2, sizeof(struct in6_addr));
++			}
+ 		}
+ 		;
+ 
+diff -urN radvd-2.19/netlink.c radvd-2.19-coverity/netlink.c
+--- radvd-2.19/netlink.c	2019-09-22 05:50:05.000000000 +0800
++++ radvd-2.19-coverity/netlink.c	2022-08-16 12:03:03.838611873 +0800
+@@ -47,9 +47,15 @@
+ 	struct msghdr msg = {.msg_name=(void *)&sa, .msg_namelen=sizeof(sa), .msg_iov=&iov, .msg_iovlen=1, .msg_control=NULL, .msg_controllen=0, .msg_flags=0};
+ 	int sock, len, addr_len = -1;
+ 	unsigned short type;
+-	char answer[32768];
++	char *answer;
+ 	struct rtattr *tb;
+ 
++	answer = malloc(32768);
++	if (answer == NULL) {
++		flog(LOG_ERR, "netlink: malloc failed: %s", strerror(errno));
++		return -1;
++	}
++
+ 	/* nl_pid (for linux kernel) and nl_groups (unicast) should be zero */
+ 	sa.nl_family = AF_NETLINK;
+ 	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
+@@ -58,8 +64,10 @@
+ 	req.i.ifi_index = iface->props.if_index;
+ 
+ 	sock = netlink_socket();
+-	if (sock == -1)
++	if (sock == -1) {
++		free(answer);
+ 		return -1;
++	}
+ 
+ 	len = sendmsg(sock, &msg, 0);
+ 	if (len == -1) {
+@@ -80,6 +88,7 @@
+ 	len -= NLMSG_LENGTH(sizeof(struct ifinfomsg));
+ 
+ 	tb = (struct rtattr *)(answer + NLMSG_LENGTH(sizeof(struct ifinfomsg)));
++	memset(tb, 0, sizeof(*tb));
+ 	while (RTA_OK(tb, len)) {
+ 		type = tb->rta_type & ~NLA_F_NESTED;
+ 		if (type == IFLA_ADDRESS) {
+@@ -90,6 +99,8 @@
+ 	}
+ 
+ out:
++	free(answer);
++
+ 	close(sock);
+ 
+ 	return addr_len;
+@@ -173,9 +184,10 @@
+ 			if (iface) {
+ 				struct in6_addr *if_addrs = NULL;
+ 				int count = get_iface_addrs(iface->props.name, NULL, &if_addrs);
++				int n = count * sizeof(struct in6_addr);
+ 
+ 				if (count != iface->props.addrs_count ||
+-				    0 != memcmp(if_addrs, iface->props.if_addrs, count * sizeof(struct in6_addr))) {
++				    0 != memcmp(if_addrs, iface->props.if_addrs, n)) {
+ 					dlog(LOG_DEBUG, 3, "netlink: %s, ifindex %d, addresses are different", ifname,
+ 					     ifaddr->ifa_index);
+ 					touch_iface(iface);
+diff -urN radvd-2.19/privsep-linux.c radvd-2.19-coverity/privsep-linux.c
+--- radvd-2.19/privsep-linux.c	2019-07-20 11:58:19.000000000 +0800
++++ radvd-2.19-coverity/privsep-linux.c	2022-08-17 11:35:35.024085593 +0800
+@@ -129,7 +129,7 @@
+ {
+ 	struct privsep_command cmd;
+ 	cmd.type = SET_INTERFACE_LINKMTU;
+-	strncpy(cmd.iface, iface, sizeof(cmd.iface));
++	strncpy(cmd.iface, iface, sizeof(cmd.iface)-1);
+ 	cmd.val = mtu;
+ 
+ 	if (writen(pfd, &cmd, sizeof(cmd)) != sizeof(cmd))
+@@ -141,7 +141,7 @@
+ {
+ 	struct privsep_command cmd;
+ 	cmd.type = SET_INTERFACE_CURHLIM;
+-	strncpy(cmd.iface, iface, sizeof(cmd.iface));
++	strncpy(cmd.iface, iface, sizeof(cmd.iface)-1);
+ 	cmd.val = hlim;
+ 	if (writen(pfd, &cmd, sizeof(cmd)) != sizeof(cmd))
+ 		return -1;
+@@ -152,7 +152,7 @@
+ {
+ 	struct privsep_command cmd;
+ 	cmd.type = SET_INTERFACE_REACHTIME;
+-	strncpy(cmd.iface, iface, sizeof(cmd.iface));
++	strncpy(cmd.iface, iface, sizeof(cmd.iface)-1);
+ 	cmd.val = rtime;
+ 	if (writen(pfd, &cmd, sizeof(cmd)) != sizeof(cmd))
+ 		return -1;
+@@ -163,7 +163,7 @@
+ {
+ 	struct privsep_command cmd;
+ 	cmd.type = SET_INTERFACE_RETRANSTIMER;
+-	strncpy(cmd.iface, iface, sizeof(cmd.iface));
++	strncpy(cmd.iface, iface, sizeof(cmd.iface)-1);
+ 	cmd.val = rettimer;
+ 	if (writen(pfd, &cmd, sizeof(cmd)) != sizeof(cmd))
+ 		return -1;
+@@ -181,10 +181,7 @@
+ 	if (!iface[0] || !strcmp(iface, ".") || !strcmp(iface, "..") || strchr(iface, '/'))
+ 		goto cleanup;
+ 
+-	if (access(spath, F_OK) != 0)
+-		goto cleanup;
+-
+-	fp = fopen(spath, "w");
++	fp = fopen(spath, "r+");
+ 	if (!fp) {
+ 		if (name)
+ 			flog(LOG_ERR, "failed to set %s (%u) for %s: %s", name, val, iface, strerror(errno));
+diff -urN radvd-2.19/process.c radvd-2.19-coverity/process.c
+--- radvd-2.19/process.c	2019-07-20 11:58:19.000000000 +0800
++++ radvd-2.19-coverity/process.c	2022-08-15 15:26:15.759123544 +0800
+@@ -25,7 +25,7 @@
+ 	     struct in6_pktinfo *pkt_info, int hoplimit)
+ {
+ 	char if_namebuf[IF_NAMESIZE] = {""};
+-	char *if_name = if_indextoname(pkt_info->ipi6_ifindex, if_namebuf);
++	char *if_name = pkt_info ? if_indextoname(pkt_info->ipi6_ifindex, if_namebuf) : "unknown interface";
+ 	if (!if_name) {
+ 		if_name = "unknown interface";
+ 	}
+@@ -184,6 +184,7 @@
+ 	struct timespec ts;
+ 	clock_gettime(CLOCK_MONOTONIC, &ts);
+ 
++	/* coverity[dont_call] : non-cryptographic use case */
+ 	double const delay = (MAX_RA_DELAY_SECONDS * rand() / (RAND_MAX + 1.0));
+ 
+ 	if (iface->UnicastOnly || rfc7772_unicast_response) {
+diff -urN radvd-2.19/radvd.c radvd-2.19-coverity/radvd.c
+--- radvd-2.19/radvd.c	2019-07-20 11:58:19.000000000 +0800
++++ radvd-2.19-coverity/radvd.c	2022-08-16 11:09:08.670995567 +0800
+@@ -145,18 +145,22 @@
+ 		close(STDIN_FILENO);
+ 		close(STDOUT_FILENO);
+ 		close(STDERR_FILENO);
+-		if (open("/dev/null", O_RDONLY) == -1) {
++		int fd;
++		if ((fd = open("/dev/null", O_RDONLY)) == -1) {
+ 			flog(LOG_ERR, "unable to redirect stdin to /dev/null");
+ 			exit(-1);
+ 		}
+-		if (open("/dev/null", O_WRONLY) == -1) {
++		close(fd);
++		if ((fd = open("/dev/null", O_WRONLY)) == -1) {
+ 			flog(LOG_ERR, "unable to redirect stdout to /dev/null");
+ 			exit(-1);
+ 		}
+-		if (open("/dev/null", O_RDWR) == -1) {
++		close(fd);
++		if ((fd = open("/dev/null", O_RDWR)) == -1) {
+ 			flog(LOG_ERR, "unable to redirect stderr to /dev/null");
+ 			exit(-1);
+ 		}
++		close(fd);
+ 	} else {
+ 		/* Parent.  Make sure the pid file is written before exiting. */
+ 		close(pipe_ends[1]);
+@@ -635,12 +639,14 @@
+ 	size_t len = strlen(pid_str);
+ 	int rc = write(pidfd, pid_str, len);
+ 	if (rc != (int)len) {
++		close(pidfd);
+ 		return -1;
+ 	}
+ 	char newline[] = {"\n"};
+ 	len = strlen(newline);
+ 	rc = write(pidfd, newline, len);
+ 	if (rc != (int)len) {
++		close(pidfd);
+ 		return -1;
+ 	}
+ 	rc = fsync(pidfd);
+@@ -654,6 +660,11 @@
+ 	char *dirstrcopy = strdup(daemon_pid_file_ident);
+ 	char *dirstr = dirname(dirstrcopy);
+ 	int dirfd = open(dirstr, O_RDONLY);
++	if (dirfd == -1) {
++		dlog(LOG_DEBUG, 4, "failed to open pid dir: %s", dirstr);
++		free(dirstrcopy);
++		return -1;
++	}
+ 	rc = fsync(dirfd);
+ 	if (rc != 0) {
+ 		dlog(LOG_DEBUG, 4, "failed to fsync pid dir: %s", dirstr);
+diff -urN radvd-2.19/socket.c radvd-2.19-coverity/socket.c
+--- radvd-2.19/socket.c	2019-07-20 11:58:19.000000000 +0800
++++ radvd-2.19-coverity/socket.c	2022-08-15 15:42:11.164569393 +0800
+@@ -41,6 +41,7 @@
+ 	err = setsockopt(sock, IPPROTO_IPV6, IPV6_RECVPKTINFO, (int[]){1}, sizeof(int));
+ 	if (err < 0) {
+ 		flog(LOG_ERR, "setsockopt(IPV6_RECVPKTINFO): %s", strerror(errno));
++		close(sock);
+ 		return -1;
+ 	}
+ 
+@@ -51,24 +52,28 @@
+ #endif
+ 	if (err < 0) {
+ 		flog(LOG_ERR, "setsockopt(IPV6_CHECKSUM): %s", strerror(errno));
++		close(sock);
+ 		return -1;
+ 	}
+ 
+ 	err = setsockopt(sock, IPPROTO_IPV6, IPV6_UNICAST_HOPS, (int[]){255}, sizeof(int));
+ 	if (err < 0) {
+ 		flog(LOG_ERR, "setsockopt(IPV6_UNICAST_HOPS): %s", strerror(errno));
++		close(sock);
+ 		return -1;
+ 	}
+ 
+ 	err = setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, (int[]){255}, sizeof(int));
+ 	if (err < 0) {
+ 		flog(LOG_ERR, "setsockopt(IPV6_MULTICAST_HOPS): %s", strerror(errno));
++		close(sock);
+ 		return -1;
+ 	}
+ #ifdef IPV6_RECVHOPLIMIT
+ 	err = setsockopt(sock, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, (int[]){1}, sizeof(int));
+ 	if (err < 0) {
+ 		flog(LOG_ERR, "setsockopt(IPV6_RECVHOPLIMIT): %s", strerror(errno));
++		close(sock);
+ 		return -1;
+ 	}
+ #endif
+@@ -84,6 +89,7 @@
+ 	err = setsockopt(sock, IPPROTO_ICMPV6, ICMP6_FILTER, &filter, sizeof(filter));
+ 	if (err < 0) {
+ 		flog(LOG_ERR, "setsockopt(ICMPV6_FILTER): %s", strerror(errno));
++		close(sock);
+ 		return -1;
+ 	}
+ 
+diff -urN radvd-2.19/util.c radvd-2.19-coverity/util.c
+--- radvd-2.19/util.c	2019-07-20 11:58:19.000000000 +0800
++++ radvd-2.19-coverity/util.c	2022-08-12 16:47:03.714881062 +0800
+@@ -167,6 +167,7 @@
+ 	return strp;
+ }
+ 
++/* coverity[dont_call] : non-cryptographic use case */
+ double rand_between(double lower, double upper) { return ((upper - lower) / (RAND_MAX + 1.0) * rand() + lower); }
+ 
+ /* This assumes that str is not null and str_size > 0 */

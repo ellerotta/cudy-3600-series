@@ -1,0 +1,20 @@
+##### BSPWIFI patches ######
+- {csp: CS00000000, ref: SWBCACPE-61236, chg: 503872 } -# edpd down takes longer than normal GW build.
+- {csp: CS00000000, ref: SWBCACPE-61403, chg: 499616 } -# wlan: revise 6764 affinity configuration
+- {csp: CS00000000, ref: SWBCACPE-61223, chg: 498733 } -# CLONE - SVT AP: EDPD_MLO: 6765REF1/6711: 6766REF1/6726: 47722A1/6726:6764LREF1:DFS is not functional after "Enhanced Deep Power Down"
+- {csp: CS00000000, ref: SWBCACPE-61231, chg: 498483 } -# Fix restore_default wl_mlo_autoconfig does not work issue.
+- {csp: CS00000000, ref: SWBCACPE-60911, chg: 495596 } -# Fix 6766 TDK image build failure. (no voice enabled).
+- {csp: CS00000000, ref: SWBCACPE-60958, chg: 495595 } -# Unable to set affinity properly.
+- {csp: CS00000000, ref: SWBCACPE-60718, chg: 492043 } -# Improve FWQ and STQ interrupt handling
+- {csp: CS00000000, ref: SWBCACPE-60430, chg: 491812 } -# wl0.1 bssid is 00:00:00:00:00:00 after edpddn and then edpdup
+- {csp: CS00000000, ref: SWBCACPE-57587, chg: 491111 } -# - kirkstone WLTOB build failure-BSP.
+- {csp: CS00000000, ref: SWBCACPE-60441, chg: 490006 } -# Removing error print for buffer allocation failure
+- {csp: CS00000000, ref: SWBCACPE-60091, chg: 489953 } -# build failure-bsp
+- {csp: CS00000000, ref: SWBCACPE-59751, chg: 489318 } -# Fix compiler warnings in unfnvram
+- {csp: CS00000000, ref: SWBCACPE-60160, chg: 488917 } -# Bandwindth downgrading from 40Mhz/80Mhz to 20Mhz after EDPD.
+- {csp: CS00000000, ref: SWBCACPE-60302, chg: 488478 } -# Fix a type casting issue by including the needed header file nvram_utils.h. This casting issue caused segfault of command "nvram uloadfile" under aarch64 build.
+- {csp: CS00000000, ref: SWBCACPE-60324, chg: 488090 } -# wl_spc: condition wlaffinity.
+- {csp: CS00000000, ref: SWBCACPE-60324, chg: 488078 } -# wl_spc: wlaffinity changes.
+- {csp: CS00000000, ref: SWBCACPE-60264, chg: 487693 } -# delete LLCSNAP insertion in pktfwd if wfd/archer can support LLCSNAP insertion (wl/shared)
+- {csp: CS00000000, ref: SWBCACPE-59221, chg: 487425 } -# Add support for MLO capable AP's
+- {csp: CS00000000, ref: SWBCACPE-60237, chg: 487278 } -# Defer skb linking to Rx processing instead of rxfill.

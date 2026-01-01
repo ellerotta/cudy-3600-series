@@ -1,0 +1,15 @@
+diff -Naur org_apparmor-v3.0.8/parser/Makefile apparmor-v3.0.8/parser/Makefile
+--- org_apparmor-v3.0.8/parser/Makefile	2023-02-14 16:41:02.000000000 +0800
++++ apparmor-v3.0.8/parser/Makefile	2023-02-15 09:05:45.499750512 +0800
+@@ -428,10 +428,6 @@
+ .PHONY: install-systemd
+ install-systemd:
+ 	install -m 755 -d $(SYSTEMD_UNIT_DIR)
+-	install -m 644 apparmor.service $(SYSTEMD_UNIT_DIR)
+-	install -m 755 apparmor.systemd $(APPARMOR_BIN_PREFIX)
+-	install -m 755 -d $(USR_SBINDIR)
+-	install -m 755 aa-teardown $(USR_SBINDIR)
+ 
+ ifndef VERBOSE
+ .SILENT: clean
+

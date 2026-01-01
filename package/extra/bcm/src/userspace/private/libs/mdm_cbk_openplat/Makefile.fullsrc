@@ -1,0 +1,27 @@
+OBJS := mdm2_oidInfoArray.o \
+        mdm2_initOpenPlat.o mdm_initmodsw_dockeree.o mdm_initmodsw_osgiee.o
+
+ifneq ($(strip $(BUILD_LIBMODSW)),)
+OBJS += rcl2_modsw_ops.o stl2_modsw_ops.o rut2_modsw_ops.o
+endif
+
+ifneq ($(strip $(BUILD_MODSW_OSGIEE)),)
+OBJS += rut2_modsw_osgiee.o
+endif
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+$(LIB): $(OBJS)
+	$(CC) -shared $(BCM_LD_FLAGS) -Wl,--whole-archive,-soname,$(notdir $@) -o $@ $(OBJS) -Wl,--no-whole-archive
+
+
+binaryonly_prepare:
+	-cp $(LIB) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:%.o=%.d)

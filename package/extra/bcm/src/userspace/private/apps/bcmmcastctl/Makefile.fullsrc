@@ -1,0 +1,21 @@
+OBJS := bcm_mcast_ctl.o
+
+LIBS := -lbcmmcast
+
+CFLAGS += -Werror -Wfatal-errors
+
+
+$(EXE): $(OBJS)
+	$(CC) $(BCM_LD_FLAGS) -o $@ $(OBJS) $(CMS_RPATH_OPTION) $(CMS_LIB_PATH) $(LIBS)
+	ln -sf bcmmcastctl bmc
+
+
+binaryonly_prepare:
+	-cp $(EXE) $(mdir)/$(SAVED)
+	-$(MAKE) -f $(name) clean
+	rm -f $(mdir)/*.c $(mdir)/*.h $(mdir)/Makefile.fullsrc
+
+
+# Generate and use dependencies.
+CFLAGS += -MD
+-include $(OBJS:.o=.d)

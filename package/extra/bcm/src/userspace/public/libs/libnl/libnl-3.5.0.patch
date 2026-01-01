@@ -1,0 +1,415 @@
+diff -ruN libnl-3.5.0/include/linux-private/linux/if_link.h libnl/include/linux-private/linux/if_link.h
+--- libnl-3.5.0/include/linux-private/linux/if_link.h	2019-09-01 05:44:42.000000000 -0700
++++ libnl/include/linux-private/linux/if_link.h	2023-11-08 08:49:36.567091554 -0800
+@@ -166,6 +166,7 @@
+ 	IFLA_NEW_IFINDEX,
+ 	IFLA_MIN_MTU,
+ 	IFLA_MAX_MTU,
++	IFLA_BCM_EXT,
+ 	__IFLA_MAX
+ };
+ 
+@@ -176,6 +177,18 @@
+ #define IFLA_RTA(r)  ((struct rtattr*)(((char*)(r)) + NLMSG_ALIGN(sizeof(struct ifinfomsg))))
+ #define IFLA_PAYLOAD(n) NLMSG_PAYLOAD(n,sizeof(struct ifinfomsg))
+ 
++struct rtnl_link_bcm_ext {
++	__u32 lbe_flags;
++};
++
++enum {
++	IFLA_BCM_EXT_UNSPEC,
++	IFLA_BCM_EXT_FLAGS,
++	__IFLA_BCM_EXT_MAX,
++};
++
++#define IFLA_BCM_EXT_MAX (__IFLA_BCM_EXT_MAX - 1)
++
+ enum {
+ 	IFLA_INET_UNSPEC,
+ 	IFLA_INET_CONF,
+@@ -455,6 +468,7 @@
+ 	IFLA_MACSEC_REPLAY_PROTECT,
+ 	IFLA_MACSEC_VALIDATION,
+ 	IFLA_MACSEC_PAD,
++	IFLA_MACSEC_OFFLOAD,
+ 	__IFLA_MACSEC_MAX,
+ };
+ 
+@@ -478,6 +492,14 @@
+ 	MACSEC_VALIDATE_MAX = __MACSEC_VALIDATE_END - 1,
+ };
+ 
++enum macsec_offload {
++	MACSEC_OFFLOAD_OFF = 0,
++	MACSEC_OFFLOAD_PHY = 1,
++	MACSEC_OFFLOAD_MAC = 2,
++	__MACSEC_OFFLOAD_END,
++	MACSEC_OFFLOAD_MAX = __MACSEC_OFFLOAD_END - 1,
++};
++
+ /* IPVLAN section */
+ enum {
+ 	IFLA_IPVLAN_UNSPEC,
+diff -ruN libnl-3.5.0/include/netlink/netlink.h libnl/include/netlink/netlink.h
+--- libnl-3.5.0/include/netlink/netlink.h	2017-11-29 08:07:48.000000000 -0800
++++ libnl/include/netlink/netlink.h	2023-11-08 08:49:36.571091713 -0800
+@@ -49,6 +49,7 @@
+ extern struct nl_dump_params nl_debug_dp;
+ 
+ /* Connection Management */
++extern int			nl_connect_trx_tmo(struct nl_sock *, int, const struct timeval *, const struct timeval *);
+ extern int			nl_connect(struct nl_sock *, int);
+ extern void			nl_close(struct nl_sock *);
+ 
+diff -ruN libnl-3.5.0/include/netlink/route/link/macsec.h libnl/include/netlink/route/link/macsec.h
+--- libnl-3.5.0/include/netlink/route/link/macsec.h	2017-11-29 08:07:48.000000000 -0800
++++ libnl/include/netlink/route/link/macsec.h	2023-11-08 08:49:36.571091713 -0800
+@@ -22,6 +22,7 @@
+ #endif
+ 
+ enum macsec_validation_type;
++enum macsec_offload;
+ 
+ struct rtnl_link *rtnl_link_macsec_alloc(void);
+ 
+@@ -66,6 +67,9 @@
+ int rtnl_link_macsec_set_scb(struct rtnl_link *, uint8_t);
+ int rtnl_link_macsec_get_scb(struct rtnl_link *, uint8_t *);
+ 
++int rtnl_link_macsec_set_offload(struct rtnl_link *link, enum macsec_offload);
++int rtnl_link_macsec_get_offload(struct rtnl_link *link, enum macsec_offload *);
++
+ 
+ 
+ #ifdef __cplusplus
+diff -ruN libnl-3.5.0/include/netlink/route/link.h libnl/include/netlink/route/link.h
+--- libnl-3.5.0/include/netlink/route/link.h	2019-09-01 05:44:42.000000000 -0700
++++ libnl/include/netlink/route/link.h	2023-11-08 08:55:32.093277714 -0800
+@@ -249,6 +249,7 @@
+ extern int	rtnl_link_get_ns_fd(struct rtnl_link *);
+ extern void	rtnl_link_set_ns_pid(struct rtnl_link *, pid_t);
+ extern pid_t	rtnl_link_get_ns_pid(struct rtnl_link *);
++extern struct rtnl_link_bcm_ext *      rtnl_link_get_bcm_ext(struct rtnl_link *);
+ 
+ extern int	rtnl_link_enslave_ifindex(struct nl_sock *, int, int);
+ extern int	rtnl_link_enslave(struct nl_sock *, struct rtnl_link *,
+diff -ruN libnl-3.5.0/include/netlink-private/types.h libnl/include/netlink-private/types.h
+--- libnl-3.5.0/include/netlink-private/types.h	2019-09-01 06:57:12.000000000 -0700
++++ libnl/include/netlink-private/types.h	2023-11-08 08:49:36.571091713 -0800
+@@ -236,6 +236,7 @@
+ 	int				l_ns_fd;
+ 	pid_t				l_ns_pid;
+ 	struct rtnl_link_vf *		l_vf_list;
++	struct rtnl_link_bcm_ext	l_bcm_ext;
+ };
+ 
+ struct rtnl_ncacheinfo
+diff -ruN libnl-3.5.0/lib/nl.c libnl/lib/nl.c
+--- libnl-3.5.0/lib/nl.c	2019-09-01 05:44:42.000000000 -0700
++++ libnl/lib/nl.c	2023-11-08 08:49:36.571091713 -0800
+@@ -69,7 +69,8 @@
+  * Create file descriptor and bind socket.
+  * @arg sk		Netlink socket (required)
+  * @arg protocol	Netlink protocol to use (required)
+- *
++ * @arg snd_timeo	Send socket timeout (ignored if NULL)
++ * @arg rcv_timeo	Receive socket timeout (ignored if NULL)
+  * Creates a new Netlink socket using `socket()` and binds the socket to the
+  * protocol and local port specified in the `sk` socket object. Fails if
+  * the socket is already connected.
+@@ -101,7 +102,7 @@
+  *
+  * @retval -NLE_BAD_SOCK Socket is already connected
+  */
+-int nl_connect(struct nl_sock *sk, int protocol)
++int nl_connect_trx_tmo(struct nl_sock *sk, int protocol, const struct timeval *snd_timeo, const struct timeval *rcv_timeo)
+ {
+ 	int err, flags = 0;
+ 	int errsv;
+@@ -119,12 +120,28 @@
+ 	sk->s_fd = socket(AF_NETLINK, SOCK_RAW | flags, protocol);
+ 	if (sk->s_fd < 0) {
+ 		errsv = errno;
+-		NL_DBG(4, "nl_connect(%p): socket() failed with %d (%s)\n", sk, errsv,
++		NL_DBG(4, "%s(%p): socket() failed with %d (%s)\n", __func__, sk, errsv,
+ 			nl_strerror_l(errsv));
+ 		err = -nl_syserr2nlerr(errsv);
+ 		goto errout;
+ 	}
+ 
++	if ((snd_timeo != NULL) && 
++	    (setsockopt (sk->s_fd, SOL_SOCKET, SO_SNDTIMEO, (const void *)snd_timeo, sizeof(struct timeval)) < 0)) {
++		errsv = errno;
++		NL_DBG(4,"setsockopt failed with %d (%s)\n", errsv, nl_strerror_l(errsv));
++		err = -nl_syserr2nlerr(errsv);
++		goto errout;
++	}
++
++	if ((rcv_timeo != NULL) && 
++	    (setsockopt (sk->s_fd, SOL_SOCKET, SO_RCVTIMEO, (const void *)rcv_timeo, sizeof(struct timeval)) < 0)) {
++		errsv = errno;
++		NL_DBG(4,"setsockopt failed with %d (%s)\n", errsv, nl_strerror_l(errsv));
++		err = -nl_syserr2nlerr(errsv);
++		goto errout;
++	}
++
+ 	err = nl_socket_set_buffer_size(sk, 0, 0);
+ 	if (err < 0)
+ 		goto errout;
+@@ -155,11 +172,11 @@
+ 
+ 			errsv = errno;
+ 			if (errsv == EADDRINUSE) {
+-				NL_DBG(4, "nl_connect(%p): local port %u already in use. Retry.\n", sk, (unsigned) port);
++				NL_DBG(4, "%s(%p): local port %u already in use. Retry.\n", __func__, sk, (unsigned) port);
+ 				_nl_socket_used_ports_set(used_ports, port);
+ 			} else {
+-				NL_DBG(4, "nl_connect(%p): bind() for port %u failed with %d (%s)\n",
+-					sk, (unsigned) port, errsv, nl_strerror_l(errsv));
++				NL_DBG(4, "%s(%p): bind() for port %u failed with %d (%s)\n",
++					__func__, sk, (unsigned) port, errsv, nl_strerror_l(errsv));
+ 				_nl_socket_used_ports_release_all(used_ports);
+ 				err = -nl_syserr2nlerr(errsv);
+ 				goto errout;
+@@ -172,8 +189,8 @@
+ 			   sizeof(sk->s_local));
+ 		if (err != 0) {
+ 			errsv = errno;
+-			NL_DBG(4, "nl_connect(%p): bind() failed with %d (%s)\n",
+-				sk, errsv, nl_strerror_l(errsv));
++			NL_DBG(4, "%s(%p): bind() failed with %d (%s)\n",
++				__func__, sk, errsv, nl_strerror_l(errsv));
+ 			err = -nl_syserr2nlerr(errsv);
+ 			goto errout;
+ 		}
+@@ -183,8 +200,8 @@
+ 	err = getsockname(sk->s_fd, (struct sockaddr *) &local,
+ 			  &addrlen);
+ 	if (err < 0) {
+-		NL_DBG(4, "nl_connect(%p): getsockname() failed with %d (%s)\n",
+-			sk, errno, nl_strerror_l(errno));
++		NL_DBG(4, "%s(%p): getsockname() failed with %d (%s)\n",
++			__func__, sk, errno, nl_strerror_l(errno));
+ 		err = -nl_syserr2nlerr(errno);
+ 		goto errout;
+ 	}
+@@ -217,6 +234,11 @@
+ 	return err;
+ }
+ 
++int nl_connect(struct nl_sock *sk, int protocol)
++{
++	return nl_connect_trx_tmo(sk, protocol, NULL, NULL);
++}
++
+ /**
+  * Close Netlink socket
+  * @arg sk		Netlink socket (required)
+diff -ruN libnl-3.5.0/lib/route/link/macsec.c libnl/lib/route/link/macsec.c
+--- libnl-3.5.0/lib/route/link/macsec.c	2017-11-29 08:07:48.000000000 -0800
++++ libnl/lib/route/link/macsec.c	2023-11-08 08:49:36.571091713 -0800
+@@ -47,6 +47,7 @@
+ #define MACSEC_ATTR_REPLAY_PROTECT	(1 << 10)
+ #define MACSEC_ATTR_VALIDATION		(1 << 11)
+ #define MACSEC_ATTR_PORT		(1 << 12)
++#define MACSEC_ATTR_HW_OFFLOAD	(1 << 13)
+ 
+ struct macsec_info {
+ 	int ifindex;
+@@ -59,6 +60,7 @@
+ 	uint8_t encoding_sa;
+ 
+ 	uint8_t send_sci, end_station, scb, replay_protect, protect, encrypt;
++	enum macsec_offload offload;
+ 
+ 	uint32_t ce_mask;
+ };
+@@ -80,6 +82,7 @@
+ 	[IFLA_MACSEC_SCB] = { .type = NLA_U8 },
+ 	[IFLA_MACSEC_REPLAY_PROTECT] = { .type = NLA_U8 },
+ 	[IFLA_MACSEC_VALIDATION] = { .type = NLA_U8 },
++	[IFLA_MACSEC_OFFLOAD] = { .type = NLA_U8 }
+ };
+ 
+ /**
+@@ -189,6 +192,11 @@
+ 		info->ce_mask |= MACSEC_ATTR_WINDOW;
+ 	}
+ 
++	if (tb[IFLA_MACSEC_OFFLOAD]) {
++		info->offload = nla_get_u8(tb[IFLA_MACSEC_OFFLOAD]);
++		info->ce_mask |= MACSEC_ATTR_HW_OFFLOAD;
++	}
++
+ 	err = 0;
+ errout:
+ 	return err;
+@@ -343,6 +351,9 @@
+ 	if ((info->ce_mask & MACSEC_ATTR_ENCODING_SA))
+ 		NLA_PUT_U8(msg, IFLA_MACSEC_ENCODING_SA, info->encoding_sa);
+ 
++	if ((info->ce_mask & MACSEC_ATTR_HW_OFFLOAD))
++		NLA_PUT_U8(msg, IFLA_MACSEC_OFFLOAD, info->offload);
++
+ 	nla_nest_end(msg, data);
+ 
+ 	return 0;
+@@ -358,7 +369,6 @@
+ 	struct macsec_info *b = link_b->l_info;
+ 	int diff = 0;
+ 	uint32_t attrs = flags & LOOSE_COMPARISON ? b->ce_mask : ~0;
+-
+ #define MACSEC_DIFF(ATTR, EXPR) ATTR_DIFF(attrs, MACSEC_ATTR_##ATTR, a, b, EXPR)
+ 
+ 	if (a->ce_mask & MACSEC_ATTR_SCI && b->ce_mask & MACSEC_ATTR_SCI)
+@@ -385,6 +395,7 @@
+ 	diff |= MACSEC_DIFF(ES, a->end_station != b->end_station);
+ 	diff |= MACSEC_DIFF(SCB, a->scb != b->scb);
+ 	diff |= MACSEC_DIFF(VALIDATION, a->validate != b->validate);
++	diff |= MACSEC_DIFF(HW_OFFLOAD, a->offload != b->offload);
+ #undef MACSEC_DIFF
+ 
+ 	return diff;
+@@ -844,6 +855,48 @@
+ 
+ 	return 0;
+ }
++
++/**
++ * Set offload
++ * @arg link		Link object
++ * @arg offload		
++ *
++ * @return 0 on success or a negative error code.
++ */
++int rtnl_link_macsec_set_offload(struct rtnl_link *link, enum macsec_offload offload)
++{
++	struct macsec_info *info = link->l_info;
++
++	IS_MACSEC_LINK_ASSERT(link);
++
++	info->offload = offload;
++	info->ce_mask |= MACSEC_ATTR_HW_OFFLOAD;
++
++	return 0;
++}
++
++/**
++ * Get offload
++ * @arg link		Link object
++ * @arg sci		On return points to the Secure Channel Identifier
++ *			in network byte order
++ *
++ * @return 0 on success or a negative error code.
++ */
++int rtnl_link_macsec_get_offload(struct rtnl_link *link, enum macsec_offload *offload)
++{
++	struct macsec_info *info = link->l_info;
++
++	IS_MACSEC_LINK_ASSERT(link);
++
++	if (!(info->ce_mask & MACSEC_ATTR_HW_OFFLOAD))
++		return -NLE_NOATTR;
++
++	if (offload)
++		*offload = info->offload;
++
++	return 0;
++}
+ 
+ /** @} */
+ 
+diff -ruN libnl-3.5.0/lib/route/link.c libnl/lib/route/link.c
+--- libnl-3.5.0/lib/route/link.c	2019-09-01 05:44:42.000000000 -0700
++++ libnl/lib/route/link.c	2023-11-08 08:49:36.575091874 -0800
+@@ -73,6 +73,7 @@
+ #define LINK_ATTR_GSO_MAX_SEGS		((uint64_t) 1 << 37)
+ #define LINK_ATTR_GSO_MAX_SIZE		((uint64_t) 1 << 38)
+ #define LINK_ATTR_LINKINFO_SLAVE_KIND	((uint64_t) 1 << 39)
++#define LINK_ATTR_BCM_EXT		((uint64_t) 1 << 40)
+ 
+ static struct nl_cache_ops rtnl_link_ops;
+ static struct nl_object_ops link_obj_ops;
+@@ -340,6 +341,26 @@
+ 	return 0;
+ }
+ 
++static struct nla_policy link_bcm_ext_policy[IFLA_BCM_EXT_MAX+1] = {
++	[IFLA_BCM_EXT_FLAGS]	= { .type = NLA_U32 },
++};
++
++static int link_bcm_ext_parse(struct rtnl_link_bcm_ext *ext,
++			      struct nlattr *nla)
++{
++	struct nlattr *tb[IFLA_BCM_EXT_MAX+1];
++	int err;
++
++	err = nla_parse_nested(tb, IFLA_BCM_EXT_MAX, nla, link_bcm_ext_policy);
++	if (err < 0)
++		return err;
++
++	if (tb[IFLA_BCM_EXT_FLAGS])
++		ext->lbe_flags = nla_get_u32(tb[IFLA_BCM_EXT_FLAGS]);
++
++	return 0;
++}
++
+ struct nla_policy rtln_link_policy[IFLA_MAX+1] = {
+ 	[IFLA_IFNAME]		= { .type = NLA_STRING,
+ 				    .maxlen = IFNAMSIZ },
+@@ -574,6 +595,11 @@
+ 		link->ce_mask |= LINK_ATTR_NS_PID;
+ 	}
+ 
++	if (tb[IFLA_BCM_EXT]) {
++		link_bcm_ext_parse(&link->l_bcm_ext, tb[IFLA_BCM_EXT]);
++		link->ce_mask |= LINK_ATTR_BCM_EXT;
++	}
++
+ 	return 0;
+ }
+ 
+@@ -2835,6 +2861,11 @@
+ 	return link->l_ns_pid;
+ }
+ 
++struct rtnl_link_bcm_ext *rtnl_link_get_bcm_ext(struct rtnl_link *link)
++{
++	return &link->l_bcm_ext;
++}
++
+ /** @} */
+ 
+ /**
+diff -ruN libnl-3.5.0/libnl-3.sym libnl/libnl-3.sym
+--- libnl-3.5.0/libnl-3.sym	2019-09-01 05:28:46.000000000 -0700
++++ libnl/libnl-3.sym	2023-11-08 08:49:36.575091874 -0800
+@@ -122,6 +122,7 @@
+ 	nl_cb_set_all;
+ 	nl_close;
+ 	nl_complete_msg;
++	nl_connect_trx_tmo;
+ 	nl_connect;
+ 	nl_data_alloc;
+ 	nl_data_alloc_attr;
+diff -ruN libnl-3.5.0/libnl-route-3.sym libnl/libnl-route-3.sym
+--- libnl-3.5.0/libnl-route-3.sym	2019-09-01 06:57:12.000000000 -0700
++++ libnl-route-3.sym	2023-11-08 14:05:48.512804606 -0800
+@@ -283,6 +283,7 @@
+ 	rtnl_link_get;
+ 	rtnl_link_get_addr;
+ 	rtnl_link_get_arptype;
++	rtnl_link_get_bcm_ext;
+ 	rtnl_link_get_broadcast;
+ 	rtnl_link_get_by_name;
+ 	rtnl_link_get_carrier;
+@@ -922,6 +923,8 @@
+ 	rtnl_link_macsec_get_end_station;
+ 	rtnl_link_macsec_set_scb;
+ 	rtnl_link_macsec_get_scb;
++	rtnl_link_macsec_set_offload;
++	rtnl_link_macsec_get_offload;
+ 	rtnl_link_macvtap_alloc;
+ 	rtnl_link_macvtap_flags2str;
+ 	rtnl_link_macvtap_get_flags;

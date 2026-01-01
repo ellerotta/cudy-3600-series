@@ -1,0 +1,22 @@
+Script started on Wed Feb  8 10:18:29 2023
+cc -c -s -W -Wall -Wstrict-prototypes -DVERSION='"0.9.6"' -I/ -I/  -I/include  -Os -fomit-frame-pointer -DHAVE_CONFIG_H rngtest.c
+In file included from [01m[Krngtest.c:30:0[m[K:
+[01m[Krng-tools-config.h:23:0:[m[K [01;35m[Kwarning: [m[K"VERSION" redefined [enabled by default]
+ #define VERSION "2"
+[01;32m[K ^[m[K
+[01m[K<command-line>:0:0:[m[K [01;36m[Knote: [m[Kthis is the location of the previous definition
+[01m[Krngtest.c:[m[K In function '[01m[Kdump_rng_stats[m[K':
+[01m[Krngtest.c:344:3:[m[K [01;35m[Kwarning: [m[Kformat '[01m[K%llu[m[K' expects argument of type '[01m[Klong long unsigned int[m[K', but argument 4 has type '[01m[Kuint64_t[m[K' [-Wformat=]
+   logprefix, elapsed_time(&rng_stats.progstart, &now));
+[01;32m[K   ^[m[K
+[01m[Krngtest.c:[m[K In function '[01m[Kdo_rng_fips_test_loop[m[K':
+[01m[Krngtest.c:416:84:[m[K [01;35m[Kwarning: [m[Kcomparison between signed and unsigned integer expressions [-Wsign-compare]
+   if( max_fips_blocks && ((rng_stats.bad_fips_blocks + rng_stats.good_fips_blocks) >= max_fips_blocks) )
+[01;32m[K                                                                                    ^[m[K
+[01m[Krngtest.c:[m[K At top level:
+[01m[Krngtest.c:71:13:[m[K [01;35m[Kwarning: [m[K'[01m[Kdoc[m[K' defined but not used [-Wunused-variable]
+ static char doc[] =
+[01;32m[K             ^[m[K
+cc -Wl,--allow-shlib-undefined stats.o rngtest.o fips.o -o rngtest
+
+Script done on Wed Feb  8 10:18:29 2023

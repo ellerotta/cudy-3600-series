@@ -1,0 +1,170 @@
+<html>
+   <head>
+      <meta HTTP-EQUIV='Pragma' CONTENT='no-cache'>
+      <link rel="stylesheet" href='stylemain.css' type='text/css'>
+         <link rel="stylesheet" href='colors.css' type='text/css'>
+            <script language="javascript" src="util.js"></script>
+            <script language="javascript" src="portName.js"></script>
+            <script language="javascript">
+<!-- hide
+
+var bridgeName = '<%ejGetOther(openVS-selBrName)%>';
+var bridgePorts = '<%ejGetOther(openVS-selBrPorts)%>';
+var laninterfaceInfo = '<%ejGetOther(bridgeInterfaceInfo, all)%>';
+var laninterfaces = laninterfaceInfo.split('|');
+var wannterfaceInfo = '<%ejGetOther(wanInterfaceInfo, bridge)%>';
+var waninterfaces = wannterfaceInfo.split('|');
+var sessionKey = '<%ejGetOther(sessionKey)%>';
+
+function btnRemove() {
+   with ( document.forms[0] ) {
+      var arrSelected = new Array();
+      var count = 0;
+      for ( i = 0; i < selOpenVSIfcs.options.length; i++ ) {
+         if ( selOpenVSIfcs.options[i].selected == true ) {
+            arrSelected[count] = selOpenVSIfcs.options[i].value;
+         }
+         count++;
+      }
+      var x = 0;
+      for (i = 0; i < selOpenVSIfcs.options.length; i++) {
+         for (x = 0; x < arrSelected.length; x++) {
+            if (selOpenVSIfcs.options[i].value == arrSelected[x]) {
+               varOpt = new Option(selOpenVSIfcs.options[i].text, selOpenVSIfcs.options[i].value);
+               availIfcs.options[availIfcs.length] = varOpt;
+               selOpenVSIfcs.options[i] = null;
+            }
+         }
+      }
+   }
+}
+
+function btnAdd() {
+   with ( document.forms[0] ) {
+      var arrSelected = new Array();
+      var count = 0;
+      for ( i = 0; i < availIfcs.options.length; i++ ) {
+         if ( availIfcs.options[i].selected == true ) {
+            arrSelected[count] = availIfcs.options[i].value;
+         }
+         count++;
+      }
+      var x = 0;
+      for (i = 0; i < availIfcs.options.length; i++) {
+         for (x = 0; x < arrSelected.length; x++) {
+            if (availIfcs.options[i].value == arrSelected[x]) {
+               varOpt = new Option(availIfcs.options[i].text, availIfcs.options[i].value);
+               selOpenVSIfcs.options[selOpenVSIfcs.length] = varOpt;
+               availIfcs.options[i] = null;
+            }
+         }
+      }
+   }
+}
+
+function btnApplySave() {
+    var loc = 'ovsBridge.cmd?action=setbr';
+
+    loc += '&brName=' + bridgeName;
+    with ( document.forms[0] ) {
+        var tempList = '';
+        var sep = '';
+        for (i = 0; i < selOpenVSIfcs.length; i++) {
+            tempList += sep;
+            tempList += selOpenVSIfcs.options[i].value;
+            sep = ',';
+        }
+        loc += '&openVSPorts='
+        if (tempList != '')
+           loc += tempList;
+        else
+           loc += ',';
+    }
+
+    loc += '&sessionKey=' + sessionKey;
+    var code = 'location="' + loc + '"';
+    eval(code);
+}
+
+window.onload = function() {
+    document.getElementById('bridgeName').innerHTML = bridgeName + ' Ports Configuration';
+}
+
+// done hiding -->
+      </script>
+   </head>
+   <body>
+      <blockquote>
+         <form>
+             <br>
+             <b id="bridgeName"></b><br>
+             <table border="0" cellpadding="0" cellspacing="0">
+                  <tr>
+                      <td width="150"><b>Selected Openvswtich Ports</b></td>
+                      <td width="100"></td>
+                      <td width="150"><b>Available Ports</b></td>
+                  </tr>
+                  <tr><td colspan="3">&nbsp;</td></tr>
+                      <tr>
+                          <td>
+                          <select multiple name="selOpenVSIfcs" size="10" style="width: 100">
+                              <script language="javascript">
+                              <!-- hide
+                              {
+                                 var i = 0;
+                                 var portList;
+
+                                 portList = bridgePorts.split(',');
+                                 for (i = 0; i < portList.length; i++) {
+                                    if ( portList[i] != ""){
+                                       document.writeln("<option value='" + portList[i] + "'>"+ portList[i]);
+                                    }
+                                 }
+                              }
+                              // done hiding -->
+                              </script>
+                         </select>
+                         </td>
+                         <td>
+                            <table border="0" cellpadding="0" cellspacing="5">
+                            <tr><td>
+                                <input type="button" value="->" onClick="btnRemove()" style="width: 30; height: 30">
+                            </td></tr>
+                            <tr><td>
+                                <input type="button" value="<-" onClick="btnAdd()" style="width: 30; height: 30">
+                           </td></tr>
+                           </table>
+                         </td>
+                         <td>
+                            <select multiple name="availIfcs" size="10" style="width: 100">
+                            <script language="javascript">
+                             <!-- hide
+                             {
+                                var i;
+
+                                for (i = 0; i < laninterfaces.length; i++) {
+                                   if (laninterfaces[i] != "") {
+                                       document.writeln("<option value='" + laninterfaces[i] + "'>" + laninterfaces[i]);
+                                   }
+                                }
+
+                                for (i = 0; i < waninterfaces.length; i++) {
+                                   if (waninterfaces[i] != "") {
+                                      var names = waninterfaces[i].split('/');
+                                      if (bridgePorts.search(names[1]) == -1)
+                                         document.writeln("<option value='" + names[1] + "'>" + names[1]);
+                                   }
+                                }
+                             }
+                           // done hiding -->
+                           </script>
+                           </select>
+                        </td>
+                     </tr>
+             </table>
+            <br><br>
+            <input type='button' onClick='btnApplySave()' value='Apply/Save'>
+         </form>
+      </blockquote>
+   </body>
+</html>

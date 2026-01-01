@@ -1,0 +1,245 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+
+<head>
+  <link rel="stylesheet" href="stylemain.css" type="text/css">
+  <link rel="stylesheet" href="colors.css" type="text/css">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title> GRE Settings</title>
+
+   <script language="javascript" src="util.js"></script>
+   <script language="javascript">
+
+<!-- hide
+
+var greTunnelRemoteEP = '<%ejGet(greTunnelRemoteEP)%>';
+var greTunnelProto = '<%ejGet(greTunnelProto)%>';
+var greTunnelKeepAlivePolicy = '<%ejGet(greTunnelKeepAlivePolicy)%>';
+var greTunnelKeepAliveTimeout = '<%ejGet(greTunnelKeepAliveTimeout)%>';
+var greTunnelKeepAliveThrsd = '<%ejGet(greTunnelKeepAliveThrsd)%>';
+var greTunnelDftDSCPMark = '<%ejGet(greTunnelDftDSCPMark)%>';
+
+var enblIP6 = '<%ejGetOther(sysInfo, enblIPv6)%>';
+
+function showhide(element, sh)
+{
+    var status;
+    if (sh == 1) {
+        status = "block";
+    }
+    else {
+        status = "none"
+    }
+
+    if (document.getElementById)
+    {
+        // standard
+        document.getElementById(element).style.display = status;
+    }
+    else if (document.all)
+    {
+        // old IE
+        document.all[element].style.display = status;
+    }
+    else if (document.layers)
+    {
+        // Netscape 4
+        document.layers[element].display = status;
+    }
+}
+
+function setSelect(item, value)
+{
+    for (i=0; i<item.options.length; i++) {
+        if (item.options[i].value == value) {
+            item.selectedIndex = i;
+            break;
+        }
+    }
+}
+
+function submitText(item, name)
+{
+    return '&' + name + '=' + item.value;
+}
+
+function getSelect(item)
+{
+    var idx;
+    if (item.options.length > 0) {
+        idx = item.selectedIndex;
+        return item.options[idx].value;
+    }
+    else {
+        return '';
+    }
+}
+
+function submitSelect(item, name)
+{
+    return '&' + name + '=' + getSelect(item);
+}
+
+function formLoad()
+{
+    with ( document.forms[0] ) {
+        tunnelKeepAliveTimeout.value = greTunnelKeepAliveTimeout;
+        tunnelKeepAliveThrsd.value = greTunnelKeepAliveThrsd;
+        tunnelDftDSCPMark.value = greTunnelDftDSCPMark;
+
+        setSelect(tunnelProto, greTunnelProto);
+        if ( (getSelect(tunnelProto) == 'IPv6') && (enblIP6 == '1') ) {
+            tunnelRemoteEP.value  = '0::0';
+        }
+        else {
+            tunnelRemoteEP.value  = '0.0.0.0';
+        }
+
+        setSelect(tunnelKeepAlivePolicy, greTunnelKeepAlivePolicy);
+        if ( getSelect(tunnelKeepAlivePolicy) == 'None' )
+            showhide('keepAlive', 0);
+        else
+            showhide('keepAlive', 1);
+    }
+}
+
+function protoSelect(OnPageLoad)
+{
+    with ( document.forms[0] ) {
+        tunnelKeepAliveTimeout.value = greTunnelKeepAliveTimeout;
+        tunnelKeepAliveThrsd.value = greTunnelKeepAliveThrsd;
+        tunnelDftDSCPMark.value = greTunnelDftDSCPMark;
+
+        if ( (getSelect(tunnelProto) == 'IPv6') && (enblIP6 == '1') ) {
+            tunnelRemoteEP.value  = '0::0';
+        }
+        else {
+            tunnelRemoteEP.value  = '0.0.0.0';
+        }
+    }
+}
+
+function keepAliveSelect(OnPageLoad) {
+    with ( document.forms[0] ) {
+        if ( getSelect(tunnelKeepAlivePolicy) == 'None' ) {
+            showhide('keepAlive', 0);
+            tunnelKeepAliveTimeout.value = greTunnelKeepAliveTimeout;
+            tunnelKeepAliveThrsd.value = greTunnelKeepAliveThrsd;
+        }
+        else
+            showhide('keepAlive', 1);
+    }
+}
+
+function applyClick() {
+    var loc = 'gre.cmd?action=add';
+    with ( document.forms[0] ) {
+        if (getSelect(tunnelProto) == 'IPv6') {
+            if ( isValidIpAddress6(tunnelRemoteEP.value) == false ) {
+                alert('Remote Endpoint IP Address "' + tunnelRemoteEP.value + '" is invalid.');
+                return;
+            }
+        }
+        else {
+            if ( isValidIpAddress(tunnelRemoteEP.value) == false ) {
+                alert('Remote Endpoint IP Address "' + tunnelRemoteEP.value + '" is invalid.');
+                return;
+            }
+        }
+
+        loc += submitSelect(tunnelProto, 'greTunnelProto');
+        loc += submitText(tunnelRemoteEP, 'greTunnelRemoteEP');
+
+        loc += submitText(tunnelKeepAlivePolicy, 'greTunnelKeepAlivePolicy');
+        loc += submitText(tunnelKeepAliveTimeout, 'greTunnelKeepAliveTimeout');
+        loc += submitText(tunnelKeepAliveThrsd, 'greTunnelKeepAliveThrsd');
+        loc += submitText(tunnelDftDSCPMark, 'greTunnelDftDSCPMark');
+    }
+    loc += '&sessionKey=<%ejGetOther(sessionKey)%>';
+    var code = 'location="' + loc + '"';
+    eval(code);
+}
+
+// done hiding -->
+</script>
+
+</head>
+
+<body onLoad="formLoad()">
+<blockquote>
+<form>
+  <b>GRE Tunnel Settings</b>
+  <br><br>
+
+  <table border="0" cellpadding="0" cellspacing="2">
+    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><script language="javascript">
+    <!-- hide
+    {
+        document.writeln("<td width='290'>IP Version</td>");
+        document.writeln("<td><select name='tunnelProto' size='1' onChange='protoSelect(0)'>");
+        document.writeln("      <option value='IPv4'>IPv4");
+        if (enblIP6 == '1')
+            document.writeln("      <option value='IPv6'>IPv6");
+        document.writeln("    </select></td>");
+    }
+    // done hiding -->
+    </script></tr>
+    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr>
+      <td width="40%"> Remote Endpoints </td>
+      <td> <input name="tunnelRemoteEP" size="20" maxlength="60" type="text"> </td>
+    </tr>
+
+    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr>
+      <td width="40%"> Default DSCP Mark </td>
+      <td> <input name="tunnelDftDSCPMark" size="20" maxlength="60" type="text"> </td>
+    </tr>
+  </table>
+
+  <table border="0" cellpadding="0" cellspacing="2">
+    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><script language="javascript">
+    <!-- hide
+    {
+        document.writeln("<td width='290'>Keep Alive Policy</td>");
+        document.writeln("<td><select name='tunnelKeepAlivePolicy' size='1' onChange='keepAliveSelect(1)'>");
+        document.writeln("      <option value='None'>None");
+        document.writeln("      <option value='ICMP'>ICMP");
+        document.writeln("</select></td>");
+    }
+    // done hiding -->
+    </script></tr>
+  </table>
+
+  <div id='keepAlive'>
+  <table border="0" cellpadding="0" cellspacing="2">
+    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr>
+      <td width="60%"> Keep Alive Timeout </td>
+      <td> <input name="tunnelKeepAliveTimeout" size="10" maxlength="20" type="text"> </td>
+    </tr>
+
+    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr>
+      <td width="60%"> Keep Alive Threshold </td>
+      <td> <input name="tunnelKeepAliveThrsd" size="10" maxlength="20" type="text"> </td>
+    </tr>
+  </table>
+  </div>
+
+
+  <table border="0" cellpadding="0" cellspacing="2">
+      <tr><td></td><td>&nbsp;</td></tr>
+      <tr>
+        <td colspan="2" align="center">
+          <input value="Apply/Save" type="button" onclick="applyClick();" >
+        </td>
+      </tr>
+  </table>
+</form>
+</blockquote>
+</body>
+</html>
